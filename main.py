@@ -1,81 +1,34 @@
-import os
-import speech_recognition as sr
+import os, warnings
+from colorama import init
+from termcolor import colored
 
-from texttable import Texttable
+from listener import Listener
+from nlp import syntax_analysis, print_lemmas, plot_dependency_graph
+from speaker import Speaker
+from utils import build_argparser
 
-def text_from_speech(recognizer, microphone):
-    """
-    Transcribe speech from recording from `microphone`
-    :param recognizer: recognizer wrapper
-    :param microphone: microphone wrapper
-    :return: a dictionary with three keys:
-        "success": a boolean indicating whether or not the API request was
-                   successful
-        "error":   `None` if no error occured, otherwise a string containing
-                   an error message if the API could not be reached or
-                   speech was unrecognizable
-        "transcription": `None` if speech could not be transcribed,
-                   otherwise a string containing the transcribed text
-    """
-    # check that recognizer and microphone arguments are appropriate type
-    if not isinstance(recognizer, sr.Recognizer):
-        raise TypeError("`recognizer` must be `Recognizer` instance")
-
-    if not isinstance(microphone, sr.Microphone):
-        raise TypeError("`microphone` must be `Microphone` instance")
-
-    # adjust the recognizer sensitivity to ambient noise and record audio
-    # from the microphone
-    with microphone as source:
-        recognizer.adjust_for_ambient_noise(source) # #  analyze the audio source for 1 second
-        audio = recognizer.listen(source)
-
-    # set up the response object
-    response = {
-        "success": True,
-        "error": None,
-        "transcription": None
-    }
-
-    # try recognizing the speech in the recording
-    # if a RequestError or UnknownValueError exception is caught,
-    #   update the response object accordingly
-    try:
-        response["transcription"] = recognizer.recognize_google(audio)
-    except sr.RequestError:
-        # API was unreachable or unresponsive
-        response["success"] = False
-        response["error"] = "API unavailable/unresponsive"
-    except sr.UnknownValueError:
-        # speech was unintelligible
-        response["error"] = "Unable to recognize speech"
-
-    return response
+warnings.simplefilter("ignore")
 
 
-def text_to_speech(text, spd=False, rate=-50, pitch=0, volume=0):
-    if spd:
-        os.system("spd-say "
-                  "--rate {} "
-                  "--pitch {} "
-                  "--volume {} "
-                  "\"{}\"".format(rate, pitch, volume, text))
-    else:
-        os.system("say \"{}\"".format(text))
+LANG = "it"
 
 
 if __name__ == '__main__':
-    rec = sr.Recognizer()
-    mic = sr.Microphone()
-    print("\nSetup done. Say something now...")
-    res = text_from_speech(rec, mic)
-    success, error, transcription = res["success"], res["error"], res["transcription"]
-    t = Texttable()
-    t.add_rows([["Key", "Value"],
-                ["Success", success],
-                ["Error", error],
-                ["Transcription", transcription]])
-    print(t.draw())
+    argparser = build_argparser()
+    args = argparser.parse_args()
 
-    if transcription is not None:
-        text_to_speech(transcription)
+    l = Listener(language=LANG, mic_index=6)
+    s = Speaker(language=LANG, rate=125, volume=1)
+    # s = Speaker(language=LANG, rate=0, pitch=0, volume=0, spd=True)
+
+    os.system("clear")
+
+    sentence = l.listen()
+    s.speak(sentence)
+
+    doc = syntax_analysis(sentence, language=LANG)
+    parsed = doc.sentences[0]
+    plot_dependency_graph(parsed)
+    print_lemmas(parsed)
+    print(f"\n{'='*20}\n")
+    doc.sentences[0].print_dependencies()

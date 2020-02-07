@@ -1,10 +1,9 @@
-import os, warnings
+import warnings
+from colorama import init
+from termcolor import colored
 
 from bot import Bot
-from listener import Listener
-from nlp import *
-from speaker import Speaker
-from utils import build_argparser
+from utils import *
 
 warnings.simplefilter("ignore")
 
@@ -13,25 +12,23 @@ LANG = "it"
 
 
 if __name__ == '__main__':
+    init(autoreset=True)
+
     argparser = build_argparser()
     args = argparser.parse_args()
 
-    l = Listener(language=LANG, mic_index=0)
-    s = Speaker(language=LANG, rate=125, volume=1)
+    # TODO: make it a command-line option
+    bot = Bot("Bot", language=LANG, verbose=True)
 
-    bot = Bot("Bot", listener=l, speaker=s)
-    # sentence = l.listen()
-    sentence = "La carbonara è un primo"
-    bot.say(sentence)
+    user_prompt = colored('User: ', 'green')
+    while True:
+        # print(f"{user_prompt} ", end="")
+        # sentence = input()
+        sentence = bot.listen()
+        print(f"{user_prompt} {sentence}")
 
-    doc = syntax_analysis(sentence, language=LANG)
-    parsed = doc.sentences[0]
-    plot_dependency_graph(parsed)
-    print_lemmas(parsed)
-    print(f"\n{'='*20}\n")
-    doc.sentences[0].print_dependencies()
+        interrupt = bot.process(sentence)
 
-    # parsed, dep_graph = core_syntax_analysis(sentence)
-    #
-    # print(parsed)
-    # print(dep_graph)
+        if interrupt:
+            bot.goodbye()
+            break

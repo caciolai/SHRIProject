@@ -1,33 +1,8 @@
 import os
 import stanfordnlp
-from stanfordnlp.server import CoreNLPClient
 from graphviz import Digraph
-from texttable import Texttable
 
 from utils import HiddenPrints
-
-
-"""
-File with all the NLP (syntax analysis) computation
-"""
-
-def core_semgrex(sentence, pattern):
-    with CoreNLPClient(annotators=['tokenize','ssplit','pos','lemma','ner', 'parse', 'depparse','coref'],
-                       timeout=30000, memory='16G') as client:
-        # Use semgrex patterns to directly find who wrote what.
-        # pattern = '{word:wrote} >nsubj {}=subject >dobj {}=object'
-        matches = client.semgrex(sentence, pattern)
-
-        # sentences contains a list with matches for each sentence.
-        # assert len(matches["sentences"]) == 3
-        # length tells you whether or not there are any matches in this
-        # assert matches["sentences"][1]["length"] == 1
-        # You can access matches like most regex groups.
-        # matches["sentences"][1]["0"]["text"] == "wrote"
-        # matches["sentences"][1]["0"]["$subject"]["text"] == "Chris"
-        # matches["sentences"][1]["0"]["$object"]["text"] == "sentence"
-
-    return matches
 
 
 config_en = {
@@ -40,7 +15,7 @@ config_it = {
 	'lang': 'it', # Language code for the language to build the Pipeline in
 }
 
-def syntax_analysis(text, language="en"):
+def syntax_analysis(text, language):
     """
     Given some text, perform syntax analysis
     :param text: the text to analyse
@@ -64,19 +39,34 @@ def syntax_analysis(text, language="en"):
 
     return doc
 
-def print_lemmas(sentence):
+def get_lemmas_info(parsed_sentence):
     """
-    Prints the information provided by NLP on the lemmas of a given sentence
-    :param sentence: sentence
+    Get the information provided by NLP on the lemmas of a given sentence
+    :param parsed_sentence: sentence from nlp(...)
     :return: None
     """
-    t = Texttable()
-    t.add_rows([["text", "lemma", "upos", "xpos"]] +
-                [[f'{word.text}', f'{word.lemma}', f'{word.upos}', f'{word.xpos}']
-                 for word in sentence.words]
-                )
+    lemmas_info = [{
+        "text": word.text,
+        "lemma": word.lemma,
+        "upos": word.upos,
+        "xpos": word.xpos
+    } for word in parsed_sentence.words]
 
-    print(t.draw())
+    return lemmas_info
+
+def find_root(parsed_sentence):
+    for word in parsed_sentence.words:
+        if word.governor == 0:
+            return word.text
+
+def print_lemmas(parsed_sentence):
+    """
+    Prints the information provided by NLP on the lemmas of a given sentence
+    :param parsed_sentence: sentence
+    :return: None
+    """
+    print(*[f'text: {word.text + " "}\tlemma: {word.lemma}\tupos: {word.upos}\txpos: {word.xpos}'
+            for word in parsed_sentence.words], sep='\n')
 
 def plot_dependency_graph(parsed_sentence):
     """
@@ -106,45 +96,3 @@ def plot_dependency_graph(parsed_sentence):
 
     g.view()
 
-
-def plot_constituency_graph(sentence):
-    g = Digraph('constituency_graph')
-
-    idx = 0
-    explored = []
-
-    nodes = [(idx, sentence.parseTree.child[0])]
-    g.node(str(idx), label=sentence.parseTree.child[0].value)
-
-    while nodes:
-        node_idx, node = nodes.pop(0)
-        explored.append(node_idx)
-        for child in node.child:
-            idx += 1
-            g.node(str(idx), label=child.value)
-            g.edge(str(node_idx), str(idx))
-            if str(child) not in explored:
-                nodes.append((idx, child))
-
-    g.view()
-
-def core_syntax_analysis(sentence):
-
-    # set up the client
-    with CoreNLPClient(annotators=['tokenize','ssplit','pos','lemma','ner', 'parse', 'depparse','coref'],
-                       timeout=30000, memory='16G') as client:
-        # submit the request to the server
-        ann = client.annotate(sentence)
-
-        # get the first sentence
-        parsed = ann.sentence[0]
-
-        # get the dependency parse of the first sentence
-        dependency_parse = parsed.basicDependencies
-
-        # # get the first token of the first sentence
-        # token = parsed.token[0]
-        #
-        # # get the part-of-speech tag
-        # print(token.pos)
-        return parsed, dependency_parse

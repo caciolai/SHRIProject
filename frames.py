@@ -40,7 +40,7 @@ class AskInfoFrame(Frame):
         super().__init__()
         self.slots.update({
             "obj": None,
-            "char": None
+            "info": None
         })
 
 class AddInfoFrame(Frame):
@@ -48,16 +48,20 @@ class AddInfoFrame(Frame):
         super().__init__()
         self.slots.update({
             "obj": None,
-            "char": None
+            "info": None
         })
 
 class OrderFrame(Frame):
     def __init__(self):
         super().__init__()
         self.slots.update({
-            "primo": None,
-            "secondo": None,
-            "contorno": None,
-            "dolce": None,
-            "bibita": None
+            "first_course": None,
+            "second_course": None,
+            "side_course": None,
+            "dessert": None,
+            "beverage": None
         })
+
+class EndFrame(Frame):
+    def __init__(self):
+        super().__init__()

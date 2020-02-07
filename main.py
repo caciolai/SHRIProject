@@ -22,13 +22,13 @@ if __name__ == '__main__':
 
     user_prompt = colored('User: ', 'green')
     while True:
-        # print(f"{user_prompt} ", end="")
-        # sentence = input()
-        sentence = bot.listen()
-        print(f"{user_prompt} {sentence}")
+        print(f"{user_prompt} ", end="")
+        command = input()
+        # command = bot.listen()
+        print(f"{command}")
 
-        interrupt = bot.process(sentence)
+        reply = bot.process(command)
 
-        if interrupt:
-            bot.goodbye()
+        if reply is None:
             break
+

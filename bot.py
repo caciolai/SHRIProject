@@ -4,10 +4,11 @@ from speaker import Speaker
 from listener import Listener, sr
 
 from kb import KB
-from nlp import syntax_analysis, get_lemmas_info, find_root
+from nlp import *
+from utils import *
+from frames import *
 
-
-INTERRUPT = "basta"
+END = "basta"
 
 class Bot:
     """
@@ -19,6 +20,7 @@ class Bot:
         :param name: the bot's name it will use in the dialogues
         :param language: the language (ISO code) of the conversation
         """
+        # TODO: implement KB for storing and retrieving information
 
         self.name = name
         self.language = language
@@ -62,23 +64,37 @@ class Bot:
         :return: a tuple (dependency parse, lemmas info)
         """
         doc = syntax_analysis(sentence, self.language)
-        parsed = doc.sentences[-1]
-        lemmas_info = get_lemmas_info(parsed)
-        return parsed, lemmas_info
 
-    def process(self, sentence):
-        parsed, lemmas_info = self._syntax_analysis(sentence)
-        root = find_root(parsed).lower().strip()
-        # plot_dependency_graph(parsed)
+        parsed = list(doc.sents)[-1]
+        return parsed
+
+    def process(self, command):
+        """
+        Parses the command and recognizes the user intent thereby selecting
+        the correct frame based upon the command root and then
+        replying consistently
+        :param command: command
+        :return: a reply (None if interaction is over)
+        """
+        parsed = self._syntax_analysis(command)
+        root = parsed.root.text.lower().strip()
         if self.verbose:
-            self.say(f"La radice della frase è {root}")
+            self.say(f"La radice della frase è \'{root}\'")
             print(f"\n{'=' * 5} DEPENDENCIES OF SENTENCE {'=' * 5}")
-            parsed.print_dependencies()
+            print_dependencies(parsed)
             print(f"\n{'=' * 5} TOKENS OF SENTENCE {'=' * 5}")
-            print(lemmas_info)
+            print_lemmas(parsed)
 
-        if root == INTERRUPT:
-            return True
+        frame = self._process(root, parsed)
+        if isinstance(frame, EndFrame):
+            self.goodbye()
+            return None
+
+    def _process(self, root, parsed):
+        # TODO: implement behavior for the frames
+        if root == END:
+            return EndFrame()
+
 
     def goodbye(self):
         self.say("Arrivederci!")

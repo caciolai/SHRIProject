@@ -1,17 +1,7 @@
 import argparse
-import os, sys
-
-class HiddenPrints:
-    """
-    A context in which all the prints get discarded
-    """
-    def __enter__(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
-        sys.stdout = self._original_stdout
+from spacy import displacy
+from nltk import Tree
+from texttable import Texttable
 
 
 def build_argparser():
@@ -24,3 +14,26 @@ def build_argparser():
                         help='print dependencies tree of every heard sentence')
 
     return parser
+
+def print_lemmas(sentence):
+    t = Texttable()
+    t.add_rows([["text", "lemma", "pos", "dep"]] +
+               [[token.text, token.lemma_, token.pos_, token.dep_]
+                 for token in sentence])
+
+    print(t.draw())
+
+def tok_format(tok):
+    return f"{tok.text} ({tok.dep_})"
+
+def to_nltk_tree(node):
+    if node.n_lefts + node.n_rights > 0:
+        return Tree(tok_format(node), [to_nltk_tree(child) for child in node.children])
+    else:
+        return tok_format(node)
+
+def print_dependencies(sentence):
+    to_nltk_tree(sentence.root).pretty_print()
+
+def visualize_dependencies(doc):
+    displacy.serve(doc, style="dep")

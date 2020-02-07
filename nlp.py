@@ -29,26 +29,6 @@ def core_semgrex(sentence, pattern):
 
     return matches
 
-def core_syntax_analysis(sentence):
-
-    # set up the client
-    with CoreNLPClient(annotators=['tokenize','ssplit','pos','lemma','ner', 'parse', 'depparse','coref'],
-                       timeout=30000, memory='16G') as client:
-        # submit the request to the server
-        ann = client.annotate(sentence)
-
-        # get the first sentence
-        parsed = ann.sentence[0]
-
-        # get the dependency parse of the first sentence
-        dependency_parse = parsed.basicDependencies
-
-        # # get the first token of the first sentence
-        # token = parsed.token[0]
-        #
-        # # get the part-of-speech tag
-        # print(token.pos)
-        return parsed, dependency_parse
 
 config_en = {
 	'processors': 'tokenize,mwt,pos,lemma,depparse', # Comma-separated list of processors to use
@@ -147,3 +127,24 @@ def plot_constituency_graph(sentence):
                 nodes.append((idx, child))
 
     g.view()
+
+def core_syntax_analysis(sentence):
+
+    # set up the client
+    with CoreNLPClient(annotators=['tokenize','ssplit','pos','lemma','ner', 'parse', 'depparse','coref'],
+                       timeout=30000, memory='16G') as client:
+        # submit the request to the server
+        ann = client.annotate(sentence)
+
+        # get the first sentence
+        parsed = ann.sentence[0]
+
+        # get the dependency parse of the first sentence
+        dependency_parse = parsed.basicDependencies
+
+        # # get the first token of the first sentence
+        # token = parsed.token[0]
+        #
+        # # get the part-of-speech tag
+        # print(token.pos)
+        return parsed, dependency_parse

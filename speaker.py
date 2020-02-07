@@ -1,6 +1,10 @@
 import pyttsx3
 import os
 
+
+WIN_EN = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_DAVID_11.0"
+WIN_IT = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_IT-IT_ELSA_11.0"
+
 class Speaker:
     """
     A class that simply speaks sentences through the computer speakers
@@ -28,9 +32,15 @@ class Speaker:
             self.engine.setProperty('volume', float(volume))
 
             if language == "en":
-                self.engine.setProperty("voice", "english")
+                if os.name == "nt":
+                    self.engine.setProperty("voice", WIN_EN)
+                else:
+                    self.engine.setProperty("voice", "english")
             elif language == "it":
-                self.engine.setProperty("voice", "italian")
+                if os.name == "nt":
+                    self.engine.setProperty("voice", WIN_IT)
+                else:
+                    self.engine.setProperty("voice", "italian")
 
     def speak(self, sentence):
         """

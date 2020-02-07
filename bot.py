@@ -49,7 +49,10 @@ class Bot:
             self._kb = {"menu": []}
 
         init(autoreset=True)
-        self.say("Salve, posso aiutarla?")
+        if self._language == "it":
+            self.say("Salve, come posso aiutarla?")
+        elif self._language == "en":
+            self.say("Hello, how may i help?")
 
     def say(self, sentence):
         print(f"{self._bot_prompt} {sentence}")
@@ -60,12 +63,16 @@ class Bot:
         while not res["success"]:
             err = res["error"]
             if isinstance(err, sr.UnknownValueError):
-                self.say("Scusi, non ho capito, potrebbe ripetere?")
+                if self._language == "it":
+                    self.say("Scusi, non ho capito, potrebbe ripetere?")
+                elif self._language == "en":
+                    self.say("Sorry, I did not understand, can you say that again?")
             elif isinstance(err, sr.RequestError):
-                self.say("Scusi, non sono in grado di capire, "
-                         "questo ristorante non funziona senza una connessione internet "
-                         "e al momento sembra non essercene una")
-                break
+                if self._language == "it":
+                    self.say("Impossibile comunicare con il server")
+                elif self._language == "en":
+                    self.say("No connection with the server available")
+                    return None
 
             res = self._listen()
 
@@ -80,26 +87,34 @@ class Bot:
         :return: a reply (None if interaction is over)
         """
         parsed = self._syntax_analysis(command)
+        root = parsed.root.text.lower().strip()
+        # print info if required
+        if self._verbose:
+            # self.say(f"La radice della frase è \'{root}\'")
+            print(f"\n{'=' * 5} DEPENDENCIES OF SENTENCE {'=' * 5}")
+            print_dependencies(parsed)
+            print(f"\n{'=' * 5} TOKENS OF SENTENCE {'=' * 5}")
+            print_lemmas(parsed)
+
+        # if no previous interaction ongoing, create current frame
+        # based on present parsed command
         if self._current_frame is None:
-            # no previous interaction ongoing
-            root = parsed.root.text.lower().strip()
-            if self._verbose:
-                self.say(f"La radice della frase è \'{root}\'")
-                print(f"\n{'=' * 5} DEPENDENCIES OF SENTENCE {'=' * 5}")
-                print_dependencies(parsed)
-                print(f"\n{'=' * 5} TOKENS OF SENTENCE {'=' * 5}")
-                print_lemmas(parsed)
-
             frame = self._process(root, parsed)
-            if isinstance(frame, EndFrame):
-                self._goodbye()
-                return None
+            self._current_frame = frame
 
-            # TODO: handle other frames (first time)
+        # handle parsed command based on the current frame
+        reply = None
+        if isinstance(self._current_frame, EndFrame):
+            self._goodbye()
+            reply = None
+        elif isinstance(self._current_frame, AddInfoFrame):
+            reply = self._handle_add_info_frame(parsed)
+        elif isinstance(self._current_frame, AskInfoFrame):
+            reply = self._handle_ask_info_frame(parsed)
+        elif isinstance(self._current_frame, OrderFrame):
+            reply = self._handle_order_frame(parsed)
 
-        else:
-            # TODO: handle ongoing frame
-            pass
+        return reply
 
     def _process(self, root, parsed):
         # TODO: implement frame recognition
@@ -161,8 +176,47 @@ class Bot:
             if entry["name"] == name:
                 return self._kb["entries"][i]
 
+    def _handle_add_info_frame(self, parsed):
+        """
+        Handles the slot filling of the current AddInfoFrame
+        :param parsed: the parsed command
+        :return: consistent reply
+        """
+        assert isinstance(self._current_frame, AddInfoFrame)
+
+        # TODO: implement handling of AddInfoFrame
+
+        return ""
+
+    def _handle_ask_info_frame(self, parsed):
+        """
+        Handles the slot filling of the current AskInfoFrame
+        :param parsed: the parsed command
+        :return: consistent reply
+        """
+        assert isinstance(self._current_frame, AskInfoFrame)
+
+        # TODO: implement handling of AskInfoFrame
+
+        return ""
+
+    def _handle_order_frame(self, parsed):
+        """
+        Handles the slot filling of the current OrderFrame
+        :param parsed: the parsed command
+        :return: consistent reply
+        """
+        assert isinstance(self._current_frame, OrderFrame)
+
+        # TODO: implement handling of OrderFrame
+
+        return ""
+
     def _goodbye(self):
-        self.say("Arrivederci!")
+        if self._language == "it":
+            self.say("Ecco il conto. Arrivederci!")
+        elif self._language == "en":
+            self.say("Here's your bill. Goodbye!")
 
     def _ok(self):
         self.say("Ok.")

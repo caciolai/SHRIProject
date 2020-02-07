@@ -8,7 +8,7 @@ from utils import *
 warnings.simplefilter("ignore")
 
 
-LANG = "it"
+LANG = "en"
 
 
 if __name__ == '__main__':
@@ -25,10 +25,10 @@ if __name__ == '__main__':
         print(f"{user_prompt} ", end="")
         command = input()
         # command = bot.listen()
-        print(f"{command}")
+        # print(f"{command}")
 
         reply = bot.process(command)
 
-        if reply is None:
-            break
+        # if reply is None:
+        #     break
 

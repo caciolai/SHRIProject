@@ -36,14 +36,17 @@ class Frame:
 
 
 class AskInfoFrame(Frame):
+    # TODO: implement triggers
     def __init__(self):
         super().__init__()
         self.slots.update({
             "obj": None,
             "info": None
         })
+
 
 class AddInfoFrame(Frame):
+    # TODO: implement triggers
     def __init__(self):
         super().__init__()
         self.slots.update({
@@ -51,17 +54,45 @@ class AddInfoFrame(Frame):
             "info": None
         })
 
+
+entry_categories = [
+    "starter",
+    "main_course",
+    "side_dish",
+    "dessert",
+    "drink"
+]
+
+order_categories = [
+    "order"
+]
 class OrderFrame(Frame):
+    @staticmethod
+    def is_category(word):
+        return word in entry_categories
+
+    @staticmethod
+    def is_trigger(word):
+        return word in order_categories
+
     def __init__(self):
         super().__init__()
         self.slots.update({
-            "first_course": None,
-            "second_course": None,
-            "side_course": None,
+            "starter": None,
+            "main_course": None,
+            "side_dish": None,
             "dessert": None,
-            "beverage": None
+            "drink": None
         })
 
+end_triggers = [
+    "bill",
+    "enough"
+]
 class EndFrame(Frame):
+    @staticmethod
+    def is_trigger(word):
+        return word in end_triggers
+
     def __init__(self):
         super().__init__()

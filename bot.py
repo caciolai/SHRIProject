@@ -8,7 +8,7 @@ from speaker import Speaker
 from listener import Listener, sr
 from utils import *
 from frames import *
-
+from exceptions import *
 
 model_it = "it_core_news_sm"
 model_en = "en_core_web_sm"
@@ -17,14 +17,6 @@ class Bot:
     """
     A class that represents the bot conducting the dialogue (SDS)
     """
-    END = "basta"
-    COURSES = [
-            "first_course",
-            "second_course",
-            "side_course",
-            "dessert",
-            "beverage",
-    ]
     def __init__(self, name, language="it", verbose=True, kb_path=None):
         """
         Constructor
@@ -32,7 +24,6 @@ class Bot:
         :param language: the language (ISO code) of the conversation
         :param kb_path: the path of the stored kb
         """
-        # TODO: implement KB for storing and retrieving information
 
         self._name = name
         self._language = language
@@ -46,7 +37,7 @@ class Bot:
         if kb_path is not None:
             self._load_kb(kb_path)
         else:
-            self._kb = {"menu": []}
+            self._kb = {"entries": []}
 
         init(autoreset=True)
         if self._language == "it":
@@ -86,10 +77,11 @@ class Bot:
         :param command: command
         :return: a reply (None if interaction is over)
         """
+        # TODO: instead of current frame, stack of frames
         parsed = self._syntax_analysis(command)
-        root = parsed.root.text.lower().strip()
         # print info if required
         if self._verbose:
+            # root = parsed.root.text.lower().strip()
             # self.say(f"La radice della frase è \'{root}\'")
             print(f"\n{'=' * 5} DEPENDENCIES OF SENTENCE {'=' * 5}")
             print_dependencies(parsed)
@@ -99,8 +91,9 @@ class Bot:
         # if no previous interaction ongoing, create current frame
         # based on present parsed command
         if self._current_frame is None:
-            frame = self._process(root, parsed)
+            frame = self._process(parsed)
             self._current_frame = frame
+            # print(frame)
 
         # handle parsed command based on the current frame
         reply = None
@@ -114,12 +107,56 @@ class Bot:
         elif isinstance(self._current_frame, OrderFrame):
             reply = self._handle_order_frame(parsed)
 
+        # print(self._current_frame)
+        print(self._kb)
+
         return reply
 
-    def _process(self, root, parsed):
-        # TODO: implement frame recognition
-        if root == self.END:
+    def _process(self, parsed):
+        triggers_counts = self._count_frame_triggers(parsed)
+        frame_name = max(triggers_counts, key=triggers_counts.get)
+        if frame_name == "EndFrame":
             return EndFrame()
+        elif frame_name == "OrderFrame":
+            return OrderFrame()
+        elif frame_name == "AddInfoFrame":
+            return AddInfoFrame()
+        elif frame_name == "AskInfoFrame":
+            return AskInfoFrame()
+        else:
+            raise AssertionError
+
+    def _count_frame_triggers(self, parsed):
+        # TODO: test frame recognition
+        res = {
+            "EndFrame": 0,
+            "OrderFrame": 0,
+            "AddInfoFrame": 0,
+            "AskInfoFrame": 0
+        }
+
+        nodes = [parsed.root]
+        visited = []
+        while nodes:
+            node = nodes.pop(0)
+            visited.append(node)
+            # print(node.text, node.dep_)
+            if EndFrame.is_trigger(node.text, node.dep_):
+                res["EndFrame"] += 1
+            if OrderFrame.is_trigger(node.text, node.dep_):
+                res["OrderFrame"] += 1
+            if AddInfoFrame.is_trigger(node.text, node.dep_):
+                res["AddInfoFrame"] += 1
+            if AskInfoFrame.is_trigger(node.text, node.dep_):
+                res["AskInfoFrame"] += 1
+
+            # print(res)
+
+            for child in node.children:
+                if not child in visited:
+                    nodes.append(child)
+
+        return res
 
     def _listen(self):
         response = self._listener.listen()
@@ -143,38 +180,80 @@ class Bot:
         parsed = list(doc.sents)[-1]
         return parsed
 
-    def _add_menu_entry(self, name, course, calories=None, vegan=None):
-        assert isinstance(name, str)
-        assert self._kb.get(name, default=None) is None
-        assert course in self.COURSES
-        assert calories is None or calories > 0
-        assert vegan is None or isinstance(vegan, bool)
+    def _find_compound(self, node, res):
+        nodes = node.children
+        while nodes:
+            node = nodes.pop(0)
+            if node.dep_ == "conj":
+                res = f"{res} and {node.text}"
+                return res
+            elif node.dep_ == "compound" or node.dep_ == "amod":
+                res = f"{node.text} {res}"
+                return res
+
+            for child in node.children:
+                nodes.append(child)
+
+        return res
+
+
+    def _find_dep(self, parsed, dep):
+        # TODO: testing
+        nodes = [parsed.root]
+        while nodes:
+            node = nodes.pop(0)
+            if node.dep_ == dep:
+                res = node.text
+                return self._find_compound(node, res)
+
+            for child in node.children:
+                nodes.append(child)
+
+        return None
+
+    def _find_object(self, parsed):
+        return self._find_dep(parsed, "dobj")
+
+    def _find_subject(self, parsed):
+        return self._find_dep(parsed, "nsubj")
+
+    def _find_attribute(self, parsed):
+        return self._find_dep(parsed, "attr")
+
+    def _add_menu_entry(self, name, course=None):
+        if self._get_menu_entry(name) is not None:
+            raise EntryAlreadyOnMenu()
+
+        if course is not None and course not in entry_courses:
+            raise CourseNotValid()
 
         self._kb["entries"].append({"name":name,
-                                    "course":course,
-                                    "calories":calories,
-                                    "vegan":vegan})
+                                    "course":course})
 
-    def _update_menu_entry(self, name, course=None, calories=None, vegan=None):
-        assert isinstance(name, str)
-        assert self._kb.get(name, default=None) is not None
-        assert course is None or course in self.COURSES
-        assert calories is None or calories > 0
+    def _update_menu_entry(self, name, course=None):
+
+        if course is not None and course not in entry_courses:
+            raise CourseNotValid()
+
+        entry = self._get_menu_entry(name)
+
+        if entry is None:
+            raise EntryNotOnMenu()
+
+        if entry["course"] is not None:
+            raise EntryAttributeAlreadySet()
 
         for i, entry in enumerate(self._kb["entries"]):
             if entry["name"] == name:
                 self._kb["entries"][i].update({"name":name,
-                                    "course":course,
-                                    "calories":calories,
-                                    "vegan":vegan})
+                                    "course":course})
 
     def _get_menu_entry(self, name):
-        assert isinstance(name, str)
-        assert self._kb.get(name, default=None) is not None
-
         for i, entry in enumerate(self._kb["entries"]):
             if entry["name"] == name:
                 return self._kb["entries"][i]
+
+        return None
 
     def _handle_add_info_frame(self, parsed):
         """
@@ -184,9 +263,57 @@ class Bot:
         """
         assert isinstance(self._current_frame, AddInfoFrame)
 
-        # TODO: implement handling of AddInfoFrame
+        # TODO: test handling of AddInfoFrame
 
-        return ""
+        reply = ""
+        self._fill_add_info_frame_slots(parsed)
+
+        if self._current_frame.get_slot("subj") == "menu":
+            # add entry to menu
+            try:
+                self._add_menu_entry(self._current_frame.get_slot("obj"))
+                reply = "Ok"
+            except EntryAlreadyOnMenu:
+                reply = "This entry is already in the menu"
+
+            self._current_frame = None
+        elif self._current_frame.get_slot("subj") == "course":
+            # add info about course
+            entry = self._current_frame.get_slot("obj")
+            course = self._current_frame.get_slot("info")
+            self._current_frame = None
+            try:
+                self._update_menu_entry(entry, course)
+                reply = "Ok"
+            except EntryAttributeAlreadySet:
+                # TODO: add option to modify entry
+                reply = "This entry is already a {}".format(
+                    self._get_menu_entry(entry)["course"]
+                )
+            except EntryNotOnMenu:
+                # TODO: add option to add entry
+                reply = "This entry is not on the menu".format(
+                    self._get_menu_entry(entry)["course"]
+                )
+            pass
+
+        return reply
+
+    def _fill_add_info_frame_slots(self, parsed):
+        root = parsed.root.text
+
+        if root == "add":
+            # add entry to menu
+            entry = self._find_object(parsed)
+            self._current_frame.fill_slot("subj", "menu")
+            self._current_frame.fill_slot("obj", entry)
+        elif root == "is":
+            # add info about course
+            entry = self._find_subject(parsed)
+            course = self._find_attribute(parsed)
+            self._current_frame.fill_slot("subj", "course")
+            self._current_frame.fill_slot("obj", entry)
+            self._current_frame.fill_slot("info", course)
 
     def _handle_ask_info_frame(self, parsed):
         """

@@ -34,9 +34,23 @@ class Frame:
 
         self.slots[slot] = value
 
+    def __str__(self):
+        out = f"{self.__class__.__name__}: {self.slots}"
+        return out
 
+askinfo_triggers = {
+    "ROOT": ["like", "ask"],
+    "xcomp": ["see", "ask"],
+    "advmod": ["how"],
+    "amod": ["many"],
+    "dobj": ["question", "calories"]
+}
 class AskInfoFrame(Frame):
     # TODO: implement triggers
+    @staticmethod
+    def is_trigger(word, dep):
+        return dep in askinfo_triggers and word in askinfo_triggers[dep]
+
     def __init__(self):
         super().__init__()
         self.slots.update({
@@ -44,36 +58,46 @@ class AskInfoFrame(Frame):
             "info": None
         })
 
-
+addinfo_triggers = {
+    "ROOT": ["add", "is"],
+    "pobj": ["menu"],
+}
 class AddInfoFrame(Frame):
     # TODO: implement triggers
+    @staticmethod
+    def is_trigger(word, dep):
+        return dep in addinfo_triggers and word in addinfo_triggers[dep]
+
     def __init__(self):
         super().__init__()
         self.slots.update({
+            "subj": None,
             "obj": None,
             "info": None
         })
 
 
-entry_categories = [
+entry_courses = [
     "starter",
-    "main_course",
-    "side_dish",
+    "main course",
+    "side dish",
     "dessert",
     "drink"
 ]
 
-order_categories = [
-    "order"
-]
+order_triggers = {
+    "ROOT": ["like", "have"],
+    "xcomp": ["order"],
+    "pobj": ["course, dish, starter, drink, dessert"]
+}
 class OrderFrame(Frame):
     @staticmethod
     def is_category(word):
-        return word in entry_categories
+        return word in entry_courses
 
     @staticmethod
-    def is_trigger(word):
-        return word in order_categories
+    def is_trigger(word, dep):
+        return dep in order_triggers and word in order_triggers[dep]
 
     def __init__(self):
         super().__init__()
@@ -85,14 +109,14 @@ class OrderFrame(Frame):
             "drink": None
         })
 
-end_triggers = [
-    "bill",
-    "enough"
-]
+end_triggers = {
+    "ROOT": ["have"],
+    "dobj": ["bill"]
+}
 class EndFrame(Frame):
     @staticmethod
-    def is_trigger(word):
-        return word in end_triggers
+    def is_trigger(word, dep):
+        return dep in end_triggers and word in end_triggers[dep]
 
     def __init__(self):
         super().__init__()

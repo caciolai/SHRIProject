@@ -31,4 +31,6 @@ if __name__ == '__main__':
 
         # if reply is None:
         #     break
+        # else:
+        bot.say(reply)
 

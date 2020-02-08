@@ -1,19 +1,15 @@
 import json
 from datetime import datetime
 import os
-import spacy
 from colorama import init
 from termcolor import colored
-import re
 
 from speaker import Speaker
 from listener import Listener, sr
 from utils import *
 from frames import *
 from exceptions import *
-
-model_it = "it_core_news_sm"
-model_en = "en_core_web_sm"
+from nlp import *
 
 class Bot:
     """
@@ -57,9 +53,9 @@ class Bot:
             err = res["error"]
             if isinstance(err, sr.UnknownValueError):
                 if self._language == "it":
-                    self.say("Scusi, non ho capito, potrebbe ripetere?")
+                    self.say("Scusi, non ho sentito, potrebbe ripetere?")
                 elif self._language == "en":
-                    self.say("Sorry, I did not understand, can you say that again?")
+                    self.say("Sorry, I did not hear that, can you say that again?")
             elif isinstance(err, sr.RequestError):
                 if self._language == "it":
                     self.say("Impossibile comunicare con il server")
@@ -71,7 +67,7 @@ class Bot:
 
         return res["sentence"]
 
-    def process(self, command):
+    def _process(self, command):
         """
         Parses the command and recognizes the user intent thereby selecting
         the correct frame based upon the command root and then
@@ -80,15 +76,15 @@ class Bot:
         :return: a reply (None if interaction is over)
         """
 
-        if command == "save menu":
+        if "save" in command:
             self._save_menu()
             return "Menu saved"
-        elif command == "load menu":
+        elif "load menu" in command:
             self._load_menu()
             return "Menu loaded"
 
         # TODO: instead of current frame, stack of frames
-        parsed = self._syntax_analysis(command)
+        parsed = syntax_analysis(command)
         # print info if required
         if self._verbose:
             # root = parsed.root.text.lower().strip()
@@ -100,13 +96,12 @@ class Bot:
 
         # if no previous interaction ongoing, create current frame
         # based on present parsed command
+        # TODO: check if old current frame is still the same
         if self._current_frame is None:
-            frame = self._process(parsed)
+            frame = self._determine_frame(parsed)
             self._current_frame = frame
-            # print(frame)
 
         # handle parsed command based on the current frame
-        reply = None
         if isinstance(self._current_frame, EndFrame):
             self._goodbye()
             self._current_frame = None
@@ -117,14 +112,22 @@ class Bot:
             reply = self._handle_ask_info_frame(parsed)
         elif isinstance(self._current_frame, OrderFrame):
             reply = self._handle_order_frame(parsed)
-
-        # print(self._current_frame)
-        # print(self._kb)
+        else:
+            # if current frame is still None, could not determine user intention
+            reply = "I did not understand that, can you say that again?"
 
         return reply
 
-    def _process(self, parsed):
+    def _determine_frame(self, parsed):
+        if is_question(parsed):
+            return AskInfoFrame()
+
         triggers_counts = self._count_frame_triggers(parsed)
+
+        # could not determine frame
+        if all([v == 0 for v in triggers_counts.values()]):
+            return None
+
         frame_name = max(triggers_counts, key=triggers_counts.get)
         if frame_name == "EndFrame":
             return EndFrame()
@@ -134,8 +137,6 @@ class Bot:
             return AddInfoFrame()
         elif frame_name == "AskInfoFrame":
             return AskInfoFrame()
-        else:
-            raise AssertionError
 
     def _count_frame_triggers(self, parsed):
         res = {
@@ -150,7 +151,6 @@ class Bot:
         while nodes:
             node = nodes.pop(0)
             visited.append(node)
-            # print(node.text, node.dep_)
             if EndFrame.is_trigger(node.text, node.dep_):
                 res["EndFrame"] += 1
             if OrderFrame.is_trigger(node.text, node.dep_):
@@ -159,8 +159,6 @@ class Bot:
                 res["AddInfoFrame"] += 1
             if AskInfoFrame.is_trigger(node.text, node.dep_):
                 res["AskInfoFrame"] += 1
-
-            # print(res)
 
             for child in node.children:
                 if not child in visited:
@@ -171,62 +169,6 @@ class Bot:
     def _listen(self):
         response = self._listener.listen()
         return response
-
-    def _syntax_analysis(self, sentence):
-        """
-        Returns syntax info about listened sentence
-        :param sentence: listened sentence
-        :return: a spacy token collection (sentence)
-        """
-        if self._language == "it":
-            model = model_it
-        elif self._language == "en":
-            model = model_en
-        else:
-            raise NotImplementedError(f"Syntax analysis for {self._language} not implemented")
-
-        nlp = spacy.load(model)
-        doc = nlp(sentence)
-        parsed = list(doc.sents)[-1]
-        return parsed
-
-    def _find_compound(self, node, res):
-        nodes = [child for child in node.children]
-        while nodes:
-            node = nodes.pop(0)
-            if node.dep_ == "conj":
-                res = f"{res} and {node.lemma_}"
-                return res
-            elif node.dep_ == "compound" or node.dep_ == "amod":
-                res = f"{node.lemma_} {res}"
-                return res
-
-            for child in node.children:
-                nodes.append(child)
-
-        return res
-
-    def _find_dep(self, parsed, dep):
-        nodes = [parsed.root]
-        while nodes:
-            node = nodes.pop(0)
-            if node.dep_ == dep:
-                res = node.lemma_
-                return self._find_compound(node, res)
-
-            for child in node.children:
-                nodes.append(child)
-
-        return None
-
-    def _find_object(self, parsed):
-        return self._find_dep(parsed, "dobj")
-
-    def _find_subject(self, parsed):
-        return self._find_dep(parsed, "nsubj")
-
-    def _find_attribute(self, parsed):
-        return self._find_dep(parsed, "attr")
 
     def _add_menu_entry(self, name, course=None):
         if self._get_menu_entry(name) is not None:
@@ -265,7 +207,7 @@ class Bot:
 
     def _handle_add_info_frame(self, parsed):
         """
-        Handles the slot filling of the current AddInfoFrame
+        Handles the current AddInfoFrame
         :param parsed: the parsed command
         :return: consistent reply
         """
@@ -282,7 +224,6 @@ class Bot:
                 reply = "Ok"
             except EntryAlreadyOnMenu:
                 reply = "This entry is already in the menu"
-
             self._current_frame = None
         elif self._current_frame.get_slot("subj") == "course":
             # add info about course
@@ -300,52 +241,60 @@ class Bot:
                 )
             except EntryNotOnMenu:
                 # TODO: add option to add entry
-                reply = "I am sorry, {} is not on the menu".format(
-                    entry
-                )
+                reply = "I am sorry, {} is not on the menu".format(entry)
             pass
 
         return reply
 
     def _fill_add_info_frame_slots(self, parsed):
-        root = parsed.root.text
+        root = parsed.root.lemma_
 
         if root == "add":
             # add entry to menu
-            entry = self._find_object(parsed)
+            entry = find_object(parsed)
             self._current_frame.fill_slot("subj", "menu")
             self._current_frame.fill_slot("obj", entry)
         elif root == "is":
             # add info about course
-            entry = self._find_subject(parsed)
-            course = self._find_attribute(parsed)
+            entry = find_subject(parsed)
+            course = find_attribute(parsed)
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("obj", entry)
             self._current_frame.fill_slot("info", course)
 
     def _handle_ask_info_frame(self, parsed):
         """
-        Handles the slot filling of the current AskInfoFrame
+        Handles the current AskInfoFrame
         :param parsed: the parsed command
         :return: consistent reply
         """
         assert isinstance(self._current_frame, AskInfoFrame)
 
-        # TODO: implement handling of AskInfoFrame
         reply = ""
-        obj = self._find_object(parsed)
-        if obj == "menu":
-            # if asked to see the menu
-            # tell menu (entry, course) for each entry in menu
-            reply = "We have " + \
-                    ", ".join([entry["name"] for entry in self._menu["entries"]])
 
-        elif obj in entry_courses:
-            # if asked about a particular course
-            # tell menu (entry, course) for each entry in menu if course == obj
-            reply = "We have " + \
-                    ", ".join([entry["name"] for entry in self._menu["entries"]
-                               if entry["course"] == obj])
+        if len(self._menu["entries"]) == 0:
+            reply = "I am sorry, there is nothing on menu today. Try and add something."
+        else:
+            obj = find_object(parsed)
+            if obj == "menu":
+                # if asked to see the menu
+                # tell menu (entry, course) for each entry in menu
+                reply = "We have "
+                for course in entry_courses:
+                    for entry in self._menu["entries"]:
+                        if entry["course"] == course:
+                            reply += entry["name"]
+
+                    reply += f" for {course}, "
+
+                reply[-2:-1] = ""
+
+            elif obj in entry_courses:
+                # if asked about a particular course
+                # tell menu (entry, course) for each entry in menu if course == obj
+                reply = "We have " + \
+                        ", ".join([entry["name"] for entry in self._menu["entries"]
+                                   if entry["course"] == obj])
 
         self._current_frame = None
         return reply
@@ -356,11 +305,50 @@ class Bot:
         :param parsed: the parsed command
         :return: consistent reply
         """
+        # TODO: allow to ask for recap
         assert isinstance(self._current_frame, OrderFrame)
 
-        # TODO: implement handling of OrderFrame
+        reply = ""
+        old_frame_len = len(self._current_frame.filled_slots())
+        try:
+            self._fill_order_frame_slots(parsed)
+        except EntryNotOnMenu:
+            reply = "I am sorry, that is not on the menu"
 
-        return ""
+        if len(self._current_frame.filled_slots()) == 0:
+            # first interaction
+            reply = "I am ready to take your order"
+        else:
+            if len(self._current_frame.unfilled_slots()) == 0 or \
+                len(self._current_frame.filled_slots()) == old_frame_len:
+                # user has made a full order or completed his order
+                reply = "Ok. Your order is complete. It will come right away. Enjoy!"
+                self._current_frame = None
+            elif len(self._current_frame.filled_slots()) > old_frame_len:
+                # user has added an entry to the order
+                reply = "Ok. Do you want anything else?"
+
+        return reply
+
+    def _fill_order_frame_slots(self, parsed):
+        root = parsed.root.lemma_
+        xcomp = find_dep(parsed, "xcomp")
+        dobj = find_dep(parsed, "dobj")
+
+        if len(self._current_frame.filled_slots()) == 0 and \
+                xcomp == "order" and dobj is None:
+            # user is ready to order, but has not told anything yet
+            return
+        elif len(self._current_frame.filled_slots()) > 0 and root == "no":
+            # user has completed his order
+            return
+        elif dobj is not None:
+            # user has made an order for a menu entry
+            entry = self._get_menu_entry(dobj)
+            if entry is None:
+                raise EntryNotOnMenu()
+
+            self._current_frame.fill_slot(entry["course"], entry["name"])
 
     def _goodbye(self):
         if self._language == "it":

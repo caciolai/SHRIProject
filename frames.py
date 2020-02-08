@@ -16,7 +16,7 @@ class Frame:
         """
         :return: the slots left to fill
         """
-        return [slot for slot, value in self.slots if value is None]
+        return [slot for slot, value in self.slots.items() if value is None]
 
     def get_slot(self, slot):
         """
@@ -55,9 +55,8 @@ entry_courses = [
 ]
 
 askinfo_triggers = {
-    "ROOT": ["like", "ask", "tell"],
-    "xcomp": ["see", "ask"],
-    "dobj": ["menu", "question"] + entry_courses
+    "ROOT": ["like", "tell"],
+    "xcomp": ["know"]
 }
 class AskInfoFrame(Frame):
     @staticmethod
@@ -71,8 +70,7 @@ class AskInfoFrame(Frame):
         })
 
 addinfo_triggers = {
-    "ROOT": ["add", "is"],
-    "pobj": ["menu"],
+    "ROOT": ["add", "is"]
 }
 class AddInfoFrame(Frame):
     @staticmethod
@@ -91,8 +89,7 @@ class AddInfoFrame(Frame):
 
 order_triggers = {
     "ROOT": ["like", "have"],
-    "xcomp": ["order"],
-    "pobj": ["course, dish, starter, drink, dessert"]
+    "xcomp": ["order"]
 }
 class OrderFrame(Frame):
     @staticmethod
@@ -110,7 +107,6 @@ class OrderFrame(Frame):
         })
 
 end_triggers = {
-    "ROOT": ["have"],
     "dobj": ["bill"]
 }
 class EndFrame(Frame):

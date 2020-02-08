@@ -27,7 +27,7 @@ if __name__ == '__main__':
         # command = bot.listen()
         # print(f"{command}")
 
-        reply = bot.process(command)
+        reply = bot._process(command)
 
         # if reply is None:
         #     break

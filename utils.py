@@ -33,7 +33,10 @@ def to_nltk_tree(node):
         return tok_format(node)
 
 def print_dependencies(sentence):
-    to_nltk_tree(sentence.root).pretty_print()
+    if len(list(sentence.root.children)) == 0:
+        print(tok_format(sentence.root))
+    else:
+        to_nltk_tree(sentence.root).pretty_print()
 
 def visualize_dependencies(doc):
     displacy.serve(doc, style="dep")

@@ -1,8 +1,10 @@
 import json
-import datetime
+from datetime import datetime
+import os
 import spacy
 from colorama import init
 from termcolor import colored
+import re
 
 from speaker import Speaker
 from listener import Listener, sr
@@ -17,12 +19,12 @@ class Bot:
     """
     A class that represents the bot conducting the dialogue (SDS)
     """
-    def __init__(self, name, language="it", verbose=True, kb_path=None):
+    def __init__(self, name, language="it", verbose=True, menu_path=None):
         """
         Constructor
         :param name: the bot's name it will use in the dialogues
         :param language: the language (ISO code) of the conversation
-        :param kb_path: the path of the stored kb
+        :param menu_path: the path of the stored menu
         """
 
         self._name = name
@@ -34,10 +36,10 @@ class Bot:
 
         self._current_frame = None
 
-        if kb_path is not None:
-            self._load_kb(kb_path)
+        if menu_path is not None:
+            self._load_menu(menu_path)
         else:
-            self._kb = {"entries": []}
+            self._menu = {"entries": []}
 
         init(autoreset=True)
         if self._language == "it":
@@ -77,6 +79,14 @@ class Bot:
         :param command: command
         :return: a reply (None if interaction is over)
         """
+
+        if command == "save menu":
+            self._save_menu()
+            return "Menu saved"
+        elif command == "load menu":
+            self._load_menu()
+            return "Menu loaded"
+
         # TODO: instead of current frame, stack of frames
         parsed = self._syntax_analysis(command)
         # print info if required
@@ -99,6 +109,7 @@ class Bot:
         reply = None
         if isinstance(self._current_frame, EndFrame):
             self._goodbye()
+            self._current_frame = None
             reply = None
         elif isinstance(self._current_frame, AddInfoFrame):
             reply = self._handle_add_info_frame(parsed)
@@ -108,7 +119,7 @@ class Bot:
             reply = self._handle_order_frame(parsed)
 
         # print(self._current_frame)
-        print(self._kb)
+        # print(self._kb)
 
         return reply
 
@@ -127,7 +138,6 @@ class Bot:
             raise AssertionError
 
     def _count_frame_triggers(self, parsed):
-        # TODO: test frame recognition
         res = {
             "EndFrame": 0,
             "OrderFrame": 0,
@@ -181,14 +191,14 @@ class Bot:
         return parsed
 
     def _find_compound(self, node, res):
-        nodes = node.children
+        nodes = [child for child in node.children]
         while nodes:
             node = nodes.pop(0)
             if node.dep_ == "conj":
-                res = f"{res} and {node.text}"
+                res = f"{res} and {node.lemma_}"
                 return res
             elif node.dep_ == "compound" or node.dep_ == "amod":
-                res = f"{node.text} {res}"
+                res = f"{node.lemma_} {res}"
                 return res
 
             for child in node.children:
@@ -196,14 +206,12 @@ class Bot:
 
         return res
 
-
     def _find_dep(self, parsed, dep):
-        # TODO: testing
         nodes = [parsed.root]
         while nodes:
             node = nodes.pop(0)
             if node.dep_ == dep:
-                res = node.text
+                res = node.lemma_
                 return self._find_compound(node, res)
 
             for child in node.children:
@@ -227,7 +235,7 @@ class Bot:
         if course is not None and course not in entry_courses:
             raise CourseNotValid()
 
-        self._kb["entries"].append({"name":name,
+        self._menu["entries"].append({"name":name,
                                     "course":course})
 
     def _update_menu_entry(self, name, course=None):
@@ -243,15 +251,15 @@ class Bot:
         if entry["course"] is not None:
             raise EntryAttributeAlreadySet()
 
-        for i, entry in enumerate(self._kb["entries"]):
+        for i, entry in enumerate(self._menu["entries"]):
             if entry["name"] == name:
-                self._kb["entries"][i].update({"name":name,
+                self._menu["entries"][i].update({"name":name,
                                     "course":course})
 
     def _get_menu_entry(self, name):
-        for i, entry in enumerate(self._kb["entries"]):
+        for i, entry in enumerate(self._menu["entries"]):
             if entry["name"] == name:
-                return self._kb["entries"][i]
+                return self._menu["entries"][i]
 
         return None
 
@@ -263,13 +271,12 @@ class Bot:
         """
         assert isinstance(self._current_frame, AddInfoFrame)
 
-        # TODO: test handling of AddInfoFrame
-
         reply = ""
         self._fill_add_info_frame_slots(parsed)
 
         if self._current_frame.get_slot("subj") == "menu":
             # add entry to menu
+            # TODO: prompt to add info about course
             try:
                 self._add_menu_entry(self._current_frame.get_slot("obj"))
                 reply = "Ok"
@@ -287,13 +294,14 @@ class Bot:
                 reply = "Ok"
             except EntryAttributeAlreadySet:
                 # TODO: add option to modify entry
-                reply = "This entry is already a {}".format(
+                reply = "{} is already a {}".format(
+                    entry,
                     self._get_menu_entry(entry)["course"]
                 )
             except EntryNotOnMenu:
                 # TODO: add option to add entry
-                reply = "This entry is not on the menu".format(
-                    self._get_menu_entry(entry)["course"]
+                reply = "I am sorry, {} is not on the menu".format(
+                    entry
                 )
             pass
 
@@ -324,8 +332,23 @@ class Bot:
         assert isinstance(self._current_frame, AskInfoFrame)
 
         # TODO: implement handling of AskInfoFrame
+        reply = ""
+        obj = self._find_object(parsed)
+        if obj == "menu":
+            # if asked to see the menu
+            # tell menu (entry, course) for each entry in menu
+            reply = "We have " + \
+                    ", ".join([entry["name"] for entry in self._menu["entries"]])
 
-        return ""
+        elif obj in entry_courses:
+            # if asked about a particular course
+            # tell menu (entry, course) for each entry in menu if course == obj
+            reply = "We have " + \
+                    ", ".join([entry["name"] for entry in self._menu["entries"]
+                               if entry["course"] == obj])
+
+        self._current_frame = None
+        return reply
 
     def _handle_order_frame(self, parsed):
         """
@@ -348,10 +371,14 @@ class Bot:
     def _ok(self):
         self.say("Ok.")
 
-    def _load_kb(self, path):
-        with open(f"./kb/{path}") as file:
-            self._kb = json.load(file)
+    def _load_menu(self, path=None):
+        if path is None:
+            menus = os.listdir("./menu")
+            menus.sort()
+            path = menus[-1]
+        with open(f"./menu/{path}") as file:
+            self._menu = json.load(file)
 
-    def _save_kb(self):
-        with open(f"./kb/{datetime.now().strftime('%Y%m%d-%H%M%S')}_kb.json", 'x') as f:
-            json.dump(self._kb, f)
+    def _save_menu(self):
+        with open(f"./menu/{datetime.now().strftime('%Y%m%d-%H%M%S')}_menu.json", 'x') as f:
+            json.dump(self._menu, f)

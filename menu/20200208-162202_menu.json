@@ -1,0 +1,17 @@
+{"entries": [
+    {"name": "onion rings", "course": "starter"},
+    {"name": "chicken wings", "course": "starter"},
+    {"name": "pizza", "course": "main course"},
+    {"name": "pasta", "course": "main course"},
+    {"name": "fish and chips", "course": "main course"},
+    {"name": "steak", "course": "main course"},
+    {"name": "hamburger", "course": "main course"},
+    {"name": "french fries", "course": "side dish"},
+    {"name": "roast potatoes", "course": "side dish"},
+    {"name": "caesars salad", "course": "side dish"},
+    {"name": "ice cream", "course": "dessert"},
+    {"name": "chocolate cake", "course": "dessert"},
+    {"name": "water", "course": "drink"},
+    {"name": "beer", "course": "drink"},
+    {"name": "coke", "course": "drink"}
+]}

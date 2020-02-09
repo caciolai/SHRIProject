@@ -30,7 +30,10 @@ class Bot:
         self._bot_prompt = colored(f'{self._name}: ', 'red')
         self._verbose = verbose
 
+        self._frame_stack = []
         self._current_frame = None
+
+        self._is_over = False
 
         if menu_path is not None:
             self._load_menu(menu_path)
@@ -39,11 +42,11 @@ class Bot:
 
         init(autoreset=True)
         if self._language == "it":
-            self.say("Salve, come posso aiutarla?")
+            self._say("Salve, come posso aiutarla?")
         elif self._language == "en":
-            self.say("Hello, how may i help?")
+            self._say("Hello, how may i help?")
 
-    def say(self, sentence):
+    def _say(self, sentence):
         print(f"{self._bot_prompt} {sentence}")
         self._speaker.speak(sentence)
 
@@ -53,21 +56,21 @@ class Bot:
             err = res["error"]
             if isinstance(err, sr.UnknownValueError):
                 if self._language == "it":
-                    self.say("Scusi, non ho sentito, potrebbe ripetere?")
+                    self._say("Scusi, non ho sentito, potrebbe ripetere?")
                 elif self._language == "en":
-                    self.say("Sorry, I did not hear that, can you say that again?")
+                    self._say("Sorry, I did not hear that, can you say that again?")
             elif isinstance(err, sr.RequestError):
                 if self._language == "it":
-                    self.say("Impossibile comunicare con il server")
+                    self._say("Impossibile comunicare con il server")
                 elif self._language == "en":
-                    self.say("No connection with the server available")
+                    self._say("No connection with the server available")
                     return None
 
             res = self._listen()
 
         return res["sentence"]
 
-    def _process(self, command):
+    def process(self, command):
         """
         Parses the command and recognizes the user intent thereby selecting
         the correct frame based upon the command root and then
@@ -76,15 +79,18 @@ class Bot:
         :return: a reply (None if interaction is over)
         """
 
-        if "save" in command:
-            self._save_menu()
-            return "Menu saved"
-        elif "load menu" in command:
-            self._load_menu()
-            return "Menu loaded"
-
-        # TODO: instead of current frame, stack of frames
         parsed = syntax_analysis(command)
+
+        if contains_lemma(parsed, "save"):
+            self._save_menu()
+            self._say("Menu saved")
+            return
+        if contains_lemma(parsed, "load"):
+            self._load_menu()
+            self._say("Menu loaded")
+            return
+
+
         # print info if required
         if self._verbose:
             # root = parsed.root.text.lower().strip()
@@ -94,11 +100,13 @@ class Bot:
             print(f"\n{'=' * 5} TOKENS OF SENTENCE {'=' * 5}")
             print_lemmas(parsed)
 
-        # if no previous interaction ongoing, create current frame
-        # based on present parsed command
-        # TODO: check if old current frame is still the same
+        frame = self._determine_frame(parsed)
+
         if self._current_frame is None:
-            frame = self._determine_frame(parsed)
+            self._current_frame = frame
+        elif type(frame) != type(self._current_frame):
+            self._frame_stack.insert(0, self._current_frame)
+            self._say("Ok we will come back to that later")
             self._current_frame = frame
 
         # handle parsed command based on the current frame
@@ -116,7 +124,23 @@ class Bot:
             # if current frame is still None, could not determine user intention
             reply = "I did not understand that, can you say that again?"
 
-        return reply
+        self._say(reply)
+        if self._current_frame is not None:
+            self._current_frame.set_last_sentence(reply)
+
+        print(self._current_frame)
+        print(self._frame_stack)
+
+        if self._current_frame is None and len(self._frame_stack) > 0:
+            self._current_frame = self._frame_stack.pop(0)
+            if isinstance(self._current_frame, AddInfoFrame):
+                self._say("Ok now back to your statement")
+            elif isinstance(self._current_frame, AskInfoFrame):
+                self._say("Ok now back to your question")
+            elif isinstance(self._current_frame, OrderFrame):
+                self._say("Ok now back to your order")
+
+            self._say(self._current_frame.get_last_sentence())
 
     def _determine_frame(self, parsed):
         if is_question(parsed):
@@ -269,7 +293,8 @@ class Bot:
         :return: consistent reply
         """
         assert isinstance(self._current_frame, AskInfoFrame)
-
+        # TODO: fix asking menu (commas and spaces messed up)
+        # TODO: check triggers ('i would like to know the desserts' does not work')
         reply = ""
 
         if len(self._menu["entries"]) == 0:
@@ -283,11 +308,11 @@ class Bot:
                 for course in entry_courses:
                     for entry in self._menu["entries"]:
                         if entry["course"] == course:
-                            reply += entry["name"]
+                            reply = f"{reply} {entry['name']}, "
 
-                    reply += f" for {course}, "
+                    reply += f"for {course}, "
 
-                reply[-2:-1] = ""
+                reply = reply[:-2]
 
             elif obj in entry_courses:
                 # if asked about a particular course
@@ -351,13 +376,14 @@ class Bot:
             self._current_frame.fill_slot(entry["course"], entry["name"])
 
     def _goodbye(self):
-        if self._language == "it":
-            self.say("Ecco il conto. Arrivederci!")
-        elif self._language == "en":
-            self.say("Here's your bill. Goodbye!")
+        self._is_over = True
+        self._say("Here's your bill. Goodbye!")
+
+    def is_over(self):
+        return self._is_over
 
     def _ok(self):
-        self.say("Ok.")
+        self._say("Ok.")
 
     def _load_menu(self, path=None):
         if path is None:

@@ -27,10 +27,8 @@ if __name__ == '__main__':
         # command = bot.listen()
         # print(f"{command}")
 
-        reply = bot._process(command)
+        bot.process(command)
 
-        # if reply is None:
-        #     break
-        # else:
-        bot.say(reply)
+        if bot.is_over():
+            break
 

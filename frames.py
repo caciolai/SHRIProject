@@ -3,20 +3,21 @@ class Frame:
     A class that represents a generic frame
     """
     def __init__(self):
-        self.slots = dict()
+        self._slots = dict()
+        self._last_sentence = None
 
     def filled_slots(self):
         """
         :return: the slots filled so far
         """
-        return [slot for slot, value in self.slots.items() if value is not None]
+        return [slot for slot, value in self._slots.items() if value is not None]
 
 
     def unfilled_slots(self):
         """
         :return: the slots left to fill
         """
-        return [slot for slot, value in self.slots.items() if value is None]
+        return [slot for slot, value in self._slots.items() if value is None]
 
     def get_slot(self, slot):
         """
@@ -24,9 +25,9 @@ class Frame:
         :raises: AssertionError if slot is not in self.slots.keys()
         :return: value of the slot (None if not filled)
         """
-        assert slot in self.slots
+        assert slot in self._slots
 
-        return self.slots.get(slot)
+        return self._slots.get(slot)
 
     def fill_slot(self, slot, value):
         """
@@ -36,13 +37,19 @@ class Frame:
                                 if slot is already filled
         :return: None
         """
-        assert slot in self.slots
-        assert self.slots[slot] is None
+        assert slot in self._slots
+        assert self._slots[slot] is None
 
-        self.slots[slot] = value
+        self._slots[slot] = value
+
+    def set_last_sentence(self, sentence):
+        self._last_sentence = sentence
+
+    def get_last_sentence(self):
+        return self._last_sentence
 
     def __str__(self):
-        out = f"{self.__class__.__name__}: {self.slots}"
+        out = f"{self.__class__.__name__}: {self._slots}"
         return out
 
 
@@ -65,7 +72,7 @@ class AskInfoFrame(Frame):
 
     def __init__(self):
         super().__init__()
-        self.slots.update({
+        self._slots.update({
             "obj": None,        # menu, courses
         })
 
@@ -79,7 +86,7 @@ class AddInfoFrame(Frame):
 
     def __init__(self):
         super().__init__()
-        self.slots.update({
+        self._slots.update({
             "subj": None,       # menu, course
             "obj": None,        # menu entry, menu entry
             "info": None        # None, course of the menu entry
@@ -102,7 +109,7 @@ class OrderFrame(Frame):
 
     def __init__(self):
         super().__init__()
-        self.slots.update({
+        self._slots.update({
             course: None for course in entry_courses
         })
 

@@ -47,6 +47,7 @@ def find_compound(node, res):
 
 
 def find_dep(parsed, dep):
+    # TODO: fix node.text vs lemma_, also decides responsibilities
     nodes = [parsed.root]
     while nodes:
         node = nodes.pop(0)

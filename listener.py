@@ -4,14 +4,13 @@ class Listener:
     """
     A class which serves as an interface between the speaking user and the ASR service
     """
-    def __init__(self, language="en", mic_index=0):
+    def __init__(self, mic_index=0):
         """
         Constructor
-        :param language: desired language (ISO code)
+        :param mic_index: the index of the microphone device to listen from
         """
         self.microphone = sr.Microphone(device_index=mic_index)
         self.recognizer = sr.Recognizer()
-        self.language = language
 
     def listen(self):
         """
@@ -40,7 +39,7 @@ class Listener:
 
         # try recognizing the speech in the recording
         try:
-            response["sentence"] = self.recognizer.recognize_google(audio, language=self.language)
+            response["sentence"] = self.recognizer.recognize_google(audio)
         except sr.RequestError as err:
             # API was unreachable or unresponsive
             response["success"] = False

@@ -1,7 +1,5 @@
-import json
+import os, json
 from datetime import datetime
-import os
-from colorama import init
 from termcolor import colored
 
 from speaker import Speaker
@@ -15,18 +13,16 @@ class Bot:
     """
     A class that represents the bot conducting the dialogue (SDS)
     """
-    def __init__(self, name, language="it", verbose=True, menu_path=None):
+    def __init__(self, name, verbose=True, menu_path=None):
         """
         Constructor
         :param name: the bot's name it will use in the dialogues
-        :param language: the language (ISO code) of the conversation
         :param menu_path: the path of the stored menu
         """
 
         self._name = name
-        self._language = language
-        self._speaker = Speaker(language=language, rate=150, volume=1)
-        self._listener = Listener(language=language, mic_index=0)
+        self._speaker = Speaker(rate=150, volume=1)
+        self._listener = Listener(mic_index=0)
         self._bot_prompt = colored(f'{self._name}: ', 'red')
         self._verbose = verbose
 
@@ -40,11 +36,7 @@ class Bot:
         else:
             self._menu = {"entries": []}
 
-        init(autoreset=True)
-        if self._language == "it":
-            self._say("Salve, come posso aiutarla?")
-        elif self._language == "en":
-            self._say("Hello, how may i help?")
+        self._say("Salve, come posso aiutarla?")
 
     def _say(self, sentence):
         print(f"{self._bot_prompt} {sentence}")
@@ -55,16 +47,10 @@ class Bot:
         while not res["success"]:
             err = res["error"]
             if isinstance(err, sr.UnknownValueError):
-                if self._language == "it":
-                    self._say("Scusi, non ho sentito, potrebbe ripetere?")
-                elif self._language == "en":
-                    self._say("Sorry, I did not hear that, can you say that again?")
+                self._say("Sorry, I did not hear that, can you say that again?")
             elif isinstance(err, sr.RequestError):
-                if self._language == "it":
-                    self._say("Impossibile comunicare con il server")
-                elif self._language == "en":
-                    self._say("No connection with the server available")
-                    return None
+                self._say("No connection with the server available")
+                return None
 
             res = self._listen()
 
@@ -293,9 +279,6 @@ class Bot:
         :return: consistent reply
         """
         assert isinstance(self._current_frame, AskInfoFrame)
-        # TODO: check triggers ('i would like to know the desserts' does not work)
-        # TODO: check triggers ('what do you have for starter' does not work)
-        reply = ""
 
         if len(self._menu["entries"]) == 0:
             reply = "I am sorry, there is nothing on menu today. Try and add something."
@@ -304,14 +287,15 @@ class Bot:
             pobj_lemma = obtain_lemma(find_pobj(parsed))
 
             matter = None
-            if obj_lemma is not None:
+            if (obj_lemma is not None and obj_lemma == "menu") or \
+                    (pobj_lemma is not None and pobj_lemma == "menu"):
+                matter = "menu"
+            elif obj_lemma is not None and obj_lemma in entry_courses:
                 matter = obj_lemma
-            elif pobj_lemma is not None:
+            elif pobj_lemma is not None and pobj_lemma in entry_courses:
                 matter = pobj_lemma
 
-            if matter is None:
-                reply = "Sorry, I did not understand your question"
-            elif matter == "menu":
+            if matter == "menu":
                 # if asked to see the menu
                 # tell menu (entry, course) for each entry in menu
                 reply = "We have:"
@@ -331,6 +315,8 @@ class Bot:
                 reply = "We have " + \
                         ", ".join([entry["name"] for entry in self._menu["entries"]
                                    if entry["course"] == matter])
+            else:
+                reply = "Sorry, I am not sure I understood your question"
 
         self._current_frame = None
         return reply

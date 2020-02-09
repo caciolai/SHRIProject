@@ -17,8 +17,7 @@ if __name__ == '__main__':
     argparser = build_argparser()
     args = argparser.parse_args()
 
-    # TODO: make it a command-line option
-    bot = Bot("Bot", language=LANG, verbose=True)
+    bot = Bot("Bot", verbose=args.verbose)
 
     user_prompt = colored('User: ', 'green')
     while True:

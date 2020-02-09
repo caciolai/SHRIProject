@@ -10,8 +10,9 @@ def build_argparser():
     :return: an argparser
     """
     parser = argparse.ArgumentParser(description='Waiter Bot')
-    parser.add_argument('--dep_tree', action="store_true",
-                        help='print dependencies tree of every heard sentence')
+    parser.add_argument('--verbose', action="store_true",
+                        help='Print dependency tree and lemmas info '
+                             'of every heard sentence')
 
     return parser
 

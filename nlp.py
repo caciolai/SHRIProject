@@ -66,7 +66,6 @@ def obtain_lemma(token_tuple):
             return f"{token_tuple[1].lemma_} {token_tuple[0].lemma_}"
 
 def find_dep(parsed, dep):
-    # TODO: fix node.text vs lemma_, also decides responsibilities
     nodes = [parsed.root]
     while nodes:
         node = nodes.pop(0)

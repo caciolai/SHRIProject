@@ -29,22 +29,41 @@ def contains_lemma(parsed, lemma):
     return False
 
 
-def find_compound(node, res):
+def find_compound(node):
     nodes = [child for child in node.children]
     while nodes:
         node = nodes.pop(0)
-        if node.dep_ == "conj":
-            res = f"{res} and {node.text}"
-            return res
-        elif node.dep_ == "compound" or node.dep_ == "amod":
-            res = f"{node.text} {res}"
-            return res
+        if node.dep_ == "conj" or node.dep_ == "compound" or node.dep_ == "amod":
+            return node
 
         for child in node.children:
             nodes.append(child)
 
-    return res
+    return None
 
+def obtain_text(token_tuple):
+    if token_tuple is None:
+        return None
+
+    if token_tuple[1] is None:
+        return token_tuple[0].text
+    else:
+        if token_tuple[1].dep_ == "conj":
+            return f"{token_tuple[0].text} and {token_tuple[1].text}"
+        elif token_tuple[1].dep_ == "amod" or token_tuple[1].dep_ == "compound":
+            return f"{token_tuple[1].text} {token_tuple[0].text}"
+
+def obtain_lemma(token_tuple):
+    if token_tuple is None:
+        return None
+
+    if token_tuple[1] is None:
+        return token_tuple[0].lemma_
+    else:
+        if token_tuple[1].dep_ == "conj":
+            return f"{token_tuple[0].lemma_} and {token_tuple[1].lemma_}"
+        elif token_tuple[1].dep_ == "amod" or token_tuple[1].dep_ == "compound":
+            return f"{token_tuple[1].lemma_} {token_tuple[0].lemma_}"
 
 def find_dep(parsed, dep):
     # TODO: fix node.text vs lemma_, also decides responsibilities
@@ -52,26 +71,26 @@ def find_dep(parsed, dep):
     while nodes:
         node = nodes.pop(0)
         if node.dep_ == dep:
-            res = node.text
-            return find_compound(node, res)
+            return (node, find_compound(node))
 
         for child in node.children:
             nodes.append(child)
 
     return None
 
-
-def find_object(parsed):
+def find_dobj(parsed):
     return find_dep(parsed, "dobj")
 
 
-def find_subject(parsed):
+def find_nsubj(parsed):
     return find_dep(parsed, "nsubj")
 
 
-def find_attribute(parsed):
+def find_attr(parsed):
     return find_dep(parsed, "attr")
 
+def find_pobj(parsed):
+    return find_dep(parsed, "pobj")
 
 def is_question(parsed):
     triggers = ["what", "how"]

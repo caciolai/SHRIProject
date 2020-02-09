@@ -111,9 +111,8 @@ class Bot:
 
         # handle parsed command based on the current frame
         if isinstance(self._current_frame, EndFrame):
-            self._goodbye()
+            reply = self._goodbye()
             self._current_frame = None
-            reply = None
         elif isinstance(self._current_frame, AddInfoFrame):
             reply = self._handle_add_info_frame(parsed)
         elif isinstance(self._current_frame, AskInfoFrame):
@@ -125,6 +124,7 @@ class Bot:
             reply = "I did not understand that, can you say that again?"
 
         self._say(reply)
+
         if self._current_frame is not None:
             self._current_frame.set_last_sentence(reply)
 
@@ -175,13 +175,13 @@ class Bot:
         while nodes:
             node = nodes.pop(0)
             visited.append(node)
-            if EndFrame.is_trigger(node.text, node.dep_):
+            if EndFrame.is_trigger(node.lemma_, node.dep_):
                 res["EndFrame"] += 1
-            if OrderFrame.is_trigger(node.text, node.dep_):
+            if OrderFrame.is_trigger(node.lemma_, node.dep_):
                 res["OrderFrame"] += 1
-            if AddInfoFrame.is_trigger(node.text, node.dep_):
+            if AddInfoFrame.is_trigger(node.lemma_, node.dep_):
                 res["AddInfoFrame"] += 1
-            if AskInfoFrame.is_trigger(node.text, node.dep_):
+            if AskInfoFrame.is_trigger(node.lemma_, node.dep_):
                 res["AskInfoFrame"] += 1
 
             for child in node.children:
@@ -275,13 +275,13 @@ class Bot:
 
         if root == "add":
             # add entry to menu
-            entry = find_object(parsed)
+            entry = obtain_text(find_dobj(parsed))
             self._current_frame.fill_slot("subj", "menu")
             self._current_frame.fill_slot("obj", entry)
         elif root == "is":
             # add info about course
-            entry = find_subject(parsed)
-            course = find_attribute(parsed)
+            entry = obtain_text(find_nsubj(parsed))
+            course = obtain_lemma(find_attr(parsed))
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("obj", entry)
             self._current_frame.fill_slot("info", course)
@@ -293,33 +293,44 @@ class Bot:
         :return: consistent reply
         """
         assert isinstance(self._current_frame, AskInfoFrame)
-        # TODO: fix asking menu (commas and spaces messed up)
-        # TODO: check triggers ('i would like to know the desserts' does not work')
+        # TODO: check triggers ('i would like to know the desserts' does not work)
+        # TODO: check triggers ('what do you have for starter' does not work)
         reply = ""
 
         if len(self._menu["entries"]) == 0:
             reply = "I am sorry, there is nothing on menu today. Try and add something."
         else:
-            obj = find_object(parsed)
-            if obj == "menu":
+            obj_lemma = obtain_lemma(find_dobj(parsed))
+            pobj_lemma = obtain_lemma(find_pobj(parsed))
+
+            matter = None
+            if obj_lemma is not None:
+                matter = obj_lemma
+            elif pobj_lemma is not None:
+                matter = pobj_lemma
+
+            if matter is None:
+                reply = "Sorry, I did not understand your question"
+            elif matter == "menu":
                 # if asked to see the menu
                 # tell menu (entry, course) for each entry in menu
-                reply = "We have "
+                reply = "We have:"
                 for course in entry_courses:
                     for entry in self._menu["entries"]:
                         if entry["course"] == course:
-                            reply = f"{reply} {entry['name']}, "
+                            reply = f"{reply} {entry['name']},"
 
-                    reply += f"for {course}, "
+                    reply = reply[:-1]
+                    reply += f" for {course};"
 
-                reply = reply[:-2]
+                reply = reply[:-1]
 
-            elif obj in entry_courses:
+            elif matter in entry_courses:
                 # if asked about a particular course
                 # tell menu (entry, course) for each entry in menu if course == obj
                 reply = "We have " + \
                         ", ".join([entry["name"] for entry in self._menu["entries"]
-                                   if entry["course"] == obj])
+                                   if entry["course"] == matter])
 
         self._current_frame = None
         return reply
@@ -357,8 +368,8 @@ class Bot:
 
     def _fill_order_frame_slots(self, parsed):
         root = parsed.root.lemma_
-        xcomp = find_dep(parsed, "xcomp")
-        dobj = find_dep(parsed, "dobj")
+        xcomp = obtain_lemma(find_dep(parsed, "xcomp"))
+        dobj = obtain_text(find_dep(parsed, "dobj"))
 
         if len(self._current_frame.filled_slots()) == 0 and \
                 xcomp == "order" and dobj is None:
@@ -377,13 +388,10 @@ class Bot:
 
     def _goodbye(self):
         self._is_over = True
-        self._say("Here's your bill. Goodbye!")
+        return "Here's your bill. Goodbye!"
 
     def is_over(self):
         return self._is_over
-
-    def _ok(self):
-        self._say("Ok.")
 
     def _load_menu(self, path=None):
         if path is None:

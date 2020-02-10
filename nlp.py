@@ -1,6 +1,6 @@
 import spacy
 
-model_it = "it_core_news_sm"
+
 model_en = "en_core_web_sm"
 
 def syntax_analysis(sentence):
@@ -79,20 +79,6 @@ def find_dep(parsed, dep):
             nodes.append(child)
 
     return None
-
-def find_dobj(parsed):
-    return find_dep(parsed, "dobj")
-
-
-def find_nsubj(parsed):
-    return find_dep(parsed, "nsubj")
-
-
-def find_attr(parsed):
-    return find_dep(parsed, "attr")
-
-def find_pobj(parsed):
-    return find_dep(parsed, "pobj")
 
 def is_question(parsed):
     triggers = ["what", "how"]

@@ -65,7 +65,6 @@ class Bot:
         :return: a reply (None if interaction is over)
         """
 
-        # TODO: better handling of confirmation mechanisms
         parsed = syntax_analysis(command)
 
         if contains_lemma(parsed, "save"):
@@ -76,7 +75,6 @@ class Bot:
             self._load_menu()
             self._say("Menu loaded")
             return
-
 
         # print info if required
         if self._verbose:
@@ -91,7 +89,7 @@ class Bot:
 
         if self._current_frame is None:
             self._current_frame = frame
-        elif type(frame) != type(self._current_frame):
+        elif frame is not None and type(frame) != type(self._current_frame):
             self._frame_stack.insert(0, self._current_frame)
             self._say("Ok we will come back to that later")
             self._current_frame = frame
@@ -262,13 +260,13 @@ class Bot:
 
         if root == "add":
             # add entry to menu
-            entry = obtain_text(find_dobj(parsed))
+            entry = obtain_text(find_dep(parsed, "dobj"))
             self._current_frame.fill_slot("subj", "menu")
             self._current_frame.fill_slot("obj", entry)
         elif root == "is":
             # add info about course
-            entry = obtain_text(find_nsubj(parsed))
-            course = obtain_lemma(find_attr(parsed))
+            entry = obtain_text(find_dep(parsed, "nsubj"))
+            course = obtain_lemma(find_dep(parsed, "attr"))
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("obj", entry)
             self._current_frame.fill_slot("info", course)
@@ -284,9 +282,8 @@ class Bot:
         if len(self._menu["entries"]) == 0:
             reply = "I am sorry, there is nothing on menu today. Try and add something."
         else:
-            # TODO: no need for so many functions (just call find_dep)
-            obj_lemma = obtain_lemma(find_dobj(parsed))
-            pobj_lemma = obtain_lemma(find_pobj(parsed))
+            obj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
+            pobj_lemma = obtain_lemma(find_dep(parsed, "pobj"))
 
             matter = None
             if (obj_lemma is not None and obj_lemma == "menu") or \
@@ -337,7 +334,7 @@ class Bot:
             self._fill_order_frame_slots(parsed)
         except EntryNotOnMenu:
             reply = "I am sorry, that is not on the menu"
-
+            return reply
 
         if len(self._current_frame.filled_slots()) == 0:
             # first interaction
@@ -351,14 +348,21 @@ class Bot:
             if self._current_frame.get_asked_recap():
                 reply = self._recap_order()
                 self._current_frame.set_asked_recap(False)
+            elif self._current_frame.is_waiting_confirmation() and \
+                self._current_frame.get_user_answer() == "yes":
+                reply = "Ok, please tell me"
+                self._current_frame.set_waiting_confirmation(False)
             elif len(self._current_frame.unfilled_slots()) == 0 or \
-                len(self._current_frame.filled_slots()) == old_frame_len:
+                    (self._current_frame.is_waiting_confirmation() and
+                    self._current_frame.get_user_answer() == "no"):
                 # user has made a full order or completed his order
                 reply = "Ok. Your order is complete. It will come right away. Enjoy!"
+                self._current_frame.set_waiting_confirmation(False)
                 self._current_frame = None
-            elif len(self._current_frame.filled_slots()) > old_frame_len:
+            else:
                 # user has added an entry to the order
                 reply = "Ok. Do you want anything else?"
+                self._current_frame.set_waiting_confirmation(True)
 
         return reply
 
@@ -376,8 +380,14 @@ class Bot:
                 xcomp == "order" and dobj is None:
             # user is ready to order, but has not told anything yet
             return
-        elif len(self._current_frame.filled_slots()) > 0 and root == "no":
+        elif self._current_frame.is_waiting_confirmation():
             # user has completed his order
+            if root == "no":
+                self._current_frame.set_user_answer("no")
+            elif root == "yes":
+                self._current_frame.set_user_answer("yes")
+            else:
+                self._current_frame.set_user_answer(None)
             return
         elif dobj is not None:
             # user has made an order for a menu entry
@@ -397,6 +407,7 @@ class Bot:
                 reply = f"{reply} {order_entry} for {course},"
 
         reply = f"{reply[:-1]}. Would you like anything else?"
+        self._current_frame.set_waiting_confirmation(True)
         return reply
 
     def _goodbye(self):

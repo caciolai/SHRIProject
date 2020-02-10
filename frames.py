@@ -5,13 +5,14 @@ class Frame:
     def __init__(self):
         self._slots = dict()
         self._last_sentence = None
+        self._waiting_confirmation = False
+        self._user_answer = None
 
     def filled_slots(self):
         """
         :return: the slots filled so far
         """
         return [slot for slot, value in self._slots.items() if value is not None]
-
 
     def unfilled_slots(self):
         """
@@ -47,6 +48,18 @@ class Frame:
 
     def get_last_sentence(self):
         return self._last_sentence
+
+    def set_waiting_confirmation(self, v):
+        self._waiting_confirmation = v
+
+    def is_waiting_confirmation(self):
+        return self._waiting_confirmation
+
+    def get_user_answer(self):
+        return self._user_answer
+
+    def set_user_answer(self, v):
+        self._user_answer = v
 
     def __str__(self):
         out = f"{self.__class__.__name__}: {self._slots}"

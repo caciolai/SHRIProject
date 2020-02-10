@@ -33,7 +33,8 @@ def find_compound(node):
     nodes = [child for child in node.children]
     while nodes:
         node = nodes.pop(0)
-        if node.dep_ == "conj" or node.dep_ == "compound" or node.dep_ == "amod":
+        if node.dep_ == "conj" or node.dep_ == "compound" or \
+                node.dep_ == "amod" or node.dep_ == "advmod":
             return node
 
         for child in node.children:
@@ -50,7 +51,8 @@ def obtain_text(token_tuple):
     else:
         if token_tuple[1].dep_ == "conj":
             return f"{token_tuple[0].text} and {token_tuple[1].text}"
-        elif token_tuple[1].dep_ == "amod" or token_tuple[1].dep_ == "compound":
+        elif token_tuple[1].dep_ == "amod" or token_tuple[1].dep_ == "compound" \
+                or token_tuple[1].dep_ == "advmod":
             return f"{token_tuple[1].text} {token_tuple[0].text}"
 
 def obtain_lemma(token_tuple):
@@ -62,7 +64,8 @@ def obtain_lemma(token_tuple):
     else:
         if token_tuple[1].dep_ == "conj":
             return f"{token_tuple[0].lemma_} and {token_tuple[1].lemma_}"
-        elif token_tuple[1].dep_ == "amod" or token_tuple[1].dep_ == "compound":
+        elif token_tuple[1].dep_ == "amod" or token_tuple[1].dep_ == "compound" \
+                or token_tuple[1].dep_ == "advmod":
             return f"{token_tuple[1].lemma_} {token_tuple[0].lemma_}"
 
 def find_dep(parsed, dep):

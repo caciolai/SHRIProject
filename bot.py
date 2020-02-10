@@ -36,7 +36,7 @@ class Bot:
         else:
             self._menu = {"entries": []}
 
-        self._say("Salve, come posso aiutarla?")
+        self._say("Hello, how may I help?")
 
     def _say(self, sentence):
         print(f"{self._bot_prompt} {sentence}")
@@ -65,6 +65,7 @@ class Bot:
         :return: a reply (None if interaction is over)
         """
 
+        # TODO: better handling of confirmation mechanisms
         parsed = syntax_analysis(command)
 
         if contains_lemma(parsed, "save"):
@@ -283,6 +284,7 @@ class Bot:
         if len(self._menu["entries"]) == 0:
             reply = "I am sorry, there is nothing on menu today. Try and add something."
         else:
+            # TODO: no need for so many functions (just call find_dep)
             obj_lemma = obtain_lemma(find_dobj(parsed))
             pobj_lemma = obtain_lemma(find_pobj(parsed))
 
@@ -327,7 +329,6 @@ class Bot:
         :param parsed: the parsed command
         :return: consistent reply
         """
-        # TODO: allow to ask for recap
         assert isinstance(self._current_frame, OrderFrame)
 
         reply = ""
@@ -337,11 +338,20 @@ class Bot:
         except EntryNotOnMenu:
             reply = "I am sorry, that is not on the menu"
 
+
         if len(self._current_frame.filled_slots()) == 0:
             # first interaction
-            reply = "I am ready to take your order"
+            if self._current_frame.get_asked_recap():
+                reply = "You did not order anything yet, sir. " \
+                        "I am ready to take your order"
+            else:
+                reply = "I am ready to take your order"
         else:
-            if len(self._current_frame.unfilled_slots()) == 0 or \
+            # ongoing interaction
+            if self._current_frame.get_asked_recap():
+                reply = self._recap_order()
+                self._current_frame.set_asked_recap(False)
+            elif len(self._current_frame.unfilled_slots()) == 0 or \
                 len(self._current_frame.filled_slots()) == old_frame_len:
                 # user has made a full order or completed his order
                 reply = "Ok. Your order is complete. It will come right away. Enjoy!"
@@ -353,11 +363,16 @@ class Bot:
         return reply
 
     def _fill_order_frame_slots(self, parsed):
+
         root = parsed.root.lemma_
         xcomp = obtain_lemma(find_dep(parsed, "xcomp"))
         dobj = obtain_text(find_dep(parsed, "dobj"))
+        advmod = obtain_lemma(find_dep(parsed, "advmod"))
 
-        if len(self._current_frame.filled_slots()) == 0 and \
+        if dobj == "order" and advmod == "so far":
+            # user has asked to recap his order so far
+            self._current_frame.set_asked_recap(True)
+        elif len(self._current_frame.filled_slots()) == 0 and \
                 xcomp == "order" and dobj is None:
             # user is ready to order, but has not told anything yet
             return
@@ -371,6 +386,18 @@ class Bot:
                 raise EntryNotOnMenu()
 
             self._current_frame.fill_slot(entry["course"], entry["name"])
+
+    def _recap_order(self):
+        assert isinstance(self._current_frame, OrderFrame)
+        reply = "You ordered:"
+
+        for course in entry_courses:
+            order_entry = self._current_frame.get_slot(course)
+            if order_entry is not None:
+                reply = f"{reply} {order_entry} for {course},"
+
+        reply = f"{reply[:-1]}. Would you like anything else?"
+        return reply
 
     def _goodbye(self):
         self._is_over = True

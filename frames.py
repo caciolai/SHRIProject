@@ -96,7 +96,9 @@ class AddInfoFrame(Frame):
 
 order_triggers = {
     "ROOT": ["like", "have"],
-    "xcomp": ["order"]
+    "xcomp": ["order"],
+    "dobj": ["order"],
+    "advmod": ["so", "far"]
 }
 class OrderFrame(Frame):
     @staticmethod
@@ -112,6 +114,13 @@ class OrderFrame(Frame):
         self._slots.update({
             course: None for course in entry_courses
         })
+        self._asked_recap = False
+
+    def get_asked_recap(self):
+        return self._asked_recap
+
+    def set_asked_recap(self, v):
+        self._asked_recap = v
 
 end_triggers = {
     "dobj": ["bill"]

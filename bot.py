@@ -227,13 +227,14 @@ class Bot:
 
         if self._current_frame.get_slot("subj") == "menu":
             # add entry to menu
-            # TODO: prompt to add info about course
             try:
-                self._add_menu_entry(self._current_frame.get_slot("obj"))
-                reply = "Ok"
+                entry = self._current_frame.get_slot("obj")
+                self._add_menu_entry(entry)
+                reply = "Ok. What course is it?"
+                self._current_frame.set_waiting_answer(True)
             except EntryAlreadyOnMenu:
                 reply = "This entry is already in the menu"
-            self._current_frame = None
+                self._current_frame = None
         elif self._current_frame.get_slot("subj") == "course":
             # add info about course
             entry = self._current_frame.get_slot("obj")
@@ -251,7 +252,8 @@ class Bot:
             except EntryNotOnMenu:
                 # TODO: add option to add entry
                 reply = "I am sorry, {} is not on the menu".format(entry)
-            pass
+            except CourseNotValid:
+                reply = "I am sorry, {} is not a course".format(course)
 
         return reply
 
@@ -260,16 +262,22 @@ class Bot:
 
         if root == "add":
             # add entry to menu
-            entry = obtain_text(find_dep(parsed, "dobj"))
+            # TODO: allow to add entry and specify course at the same time
             self._current_frame.fill_slot("subj", "menu")
+            entry = obtain_text(find_dep(parsed, "dobj"))
             self._current_frame.fill_slot("obj", entry)
         elif root == "is":
             # add info about course
-            entry = obtain_text(find_dep(parsed, "nsubj"))
-            course = obtain_lemma(find_dep(parsed, "attr"))
             self._current_frame.fill_slot("subj", "course")
+            entry = obtain_text(find_dep(parsed, "nsubj"))
             self._current_frame.fill_slot("obj", entry)
+            course = obtain_lemma(find_dep(parsed, "attr"))
             self._current_frame.fill_slot("info", course)
+        elif self._current_frame.is_waiting_answer():
+            course = obtain_lemma(find_dep(parsed, "ROOT"))
+            self._current_frame.fill_slot("subj", "course")
+            self._current_frame.fill_slot("info", course)
+
 
     def _handle_ask_info_frame(self, parsed):
         """

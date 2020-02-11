@@ -27,7 +27,7 @@ class Listener:
         # adjust the recognizer sensitivity to ambient noise and record audio from the microphone
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source)
-            print("* listening *")
+            # print("* listening *")
             audio = self.recognizer.listen(source)
 
         # set up the response object

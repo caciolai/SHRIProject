@@ -5,6 +5,7 @@ class Frame:
     def __init__(self):
         self._slots = dict()
         self._last_sentence = None
+        self._waiting_answer = False
         self._waiting_confirmation = False
         self._user_answer = None
 
@@ -39,7 +40,6 @@ class Frame:
         :return: None
         """
         assert slot in self._slots
-        assert self._slots[slot] is None
 
         self._slots[slot] = value
 
@@ -54,6 +54,12 @@ class Frame:
 
     def is_waiting_confirmation(self):
         return self._waiting_confirmation
+
+    def set_waiting_answer(self, v):
+        self._waiting_answer = v
+
+    def is_waiting_answer(self):
+        return self._waiting_answer
 
     def get_user_answer(self):
         return self._user_answer
@@ -136,7 +142,9 @@ class OrderFrame(Frame):
         self._asked_recap = v
 
 end_triggers = {
-    "dobj": ["bill"]
+    "dobj": ["bill"],
+    "ROOT": ["shut"],
+    "prt": ["down"]
 }
 class EndFrame(Frame):
     @staticmethod

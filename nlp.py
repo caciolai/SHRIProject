@@ -70,6 +70,8 @@ def obtain_lemma(token_tuple):
 
 def find_dep(parsed, dep):
     nodes = [parsed.root]
+    res = []
+    # TODO: return all results instead of first one
     while nodes:
         node = nodes.pop(0)
         if node.dep_ == dep:

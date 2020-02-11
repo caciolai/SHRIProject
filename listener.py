@@ -3,14 +3,21 @@ import speech_recognition as sr
 class Listener:
     """
     A class which serves as an interface between the speaking user and the ASR service
+
+    Attributes
+    ----------
+    _microphone:
+        object to record audio from the microphone
+    _recognizer:
+        object to recognize speech from audio (ASR)
     """
     def __init__(self, mic_index=0):
         """
         Constructor
         :param mic_index: the index of the microphone device to listen from
         """
-        self.microphone = sr.Microphone(device_index=mic_index)
-        self.recognizer = sr.Recognizer()
+        self._microphone = sr.Microphone(device_index=mic_index)
+        self._recognizer = sr.Recognizer()
 
     def listen(self):
         """
@@ -25,10 +32,10 @@ class Listener:
         """
 
         # adjust the recognizer sensitivity to ambient noise and record audio from the microphone
-        with self.microphone as source:
-            self.recognizer.adjust_for_ambient_noise(source)
+        with self._microphone as source:
+            self._recognizer.adjust_for_ambient_noise(source)
             # print("* listening *")
-            audio = self.recognizer.listen(source)
+            audio = self._recognizer.listen(source)
 
         # set up the response object
         response = {
@@ -39,7 +46,7 @@ class Listener:
 
         # try recognizing the speech in the recording
         try:
-            response["sentence"] = self.recognizer.recognize_google(audio)
+            response["sentence"] = self._recognizer.recognize_google(audio).lower().strip()
         except sr.RequestError as err:
             # API was unreachable or unresponsive
             response["success"] = False

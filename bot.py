@@ -12,18 +12,41 @@ from nlp import *
 class Bot:
     """
     A class that represents the bot conducting the dialogue (SDS)
+
+    Attributes
+    ----------
+    _name: str
+        the name of the bot
+    _speaker: Speaker
+        speaker object used for text to speech
+    _listener: Listener
+        listener object used for speech to perform Automatic Speech Recognition
+    _bot_prompt: str
+        colored name of the bot to appear in the terminal
+    _verbose: bool
+        whether the bot should print info about the command it receives
+        (dependency tree, lemmas info)
+    _frame_stack: list
+        stack where the bot holds the frames it still has not finished to process
+    _current_frame: Frame
+        current frame the bot is processing
+    _is_over: bool
+        whether the interaction is over
     """
-    def __init__(self, name, verbose=True, menu_path=None):
+    def __init__(self, name, color, verbose=True, menu_path=None):
         """
         Constructor
         :param name: the bot's name it will use in the dialogues
+        :param color: the color the bot will use in the prompt
+        :param verbose: whether the bot should print info about
+        the command it receives (dependency tree, lemmas info)
         :param menu_path: the path of the stored menu
         """
 
         self._name = name
         self._speaker = Speaker(rate=150, volume=1)
         self._listener = Listener(mic_index=0)
-        self._bot_prompt = colored(f'{self._name}: ', 'red')
+        self._bot_prompt = colored(f'{self._name}: ', color)
         self._verbose = verbose
 
         self._frame_stack = []
@@ -36,13 +59,24 @@ class Bot:
         else:
             self._menu = {"entries": []}
 
-        self._say("Hello, how may I help?")
+        # when finished setup, welcome user
+        self._say(self._welcome())
 
     def _say(self, sentence):
+        """
+        Says the given sentence through the bot speaker object
+        :param sentence: sentence
+        :return: None
+        """
         print(f"{self._bot_prompt} {sentence}")
         self._speaker.speak(sentence)
 
     def listen(self):
+        """
+        Tries to listen for commands.
+        Loops until the sentence in understood properly or there is a connection error
+        :return: transcribed sentence from voice
+        """
         res = self._listen()
         while not res["success"]:
             err = res["error"]
@@ -56,37 +90,48 @@ class Bot:
 
         return res["sentence"]
 
+    def _listen(self):
+        """
+        A simple proxy to access bot own listener object and obtain
+        the transcription of the voice command issued by the user
+        :return: a response object (see Listener docs)
+        """
+        response = self._listener.listen()
+        return response
+
     def process(self, command):
         """
-        Parses the command and recognizes the user intent thereby selecting
-        the correct frame based upon the command root and then
-        replying consistently
+        Processes the given command
         :param command: command
-        :return: a reply (None if interaction is over)
+        :return: a proper reply (None if interaction is over)
         """
 
+        # obtain spacy syntax dependency tree
         parsed = syntax_analysis(command)
 
-        if contains_lemma(parsed, "save"):
+        # if prompted to load last stored menu, or saved current one, do so
+        if contains_text(parsed, "save"):
             self._save_menu()
             self._say("Menu saved")
             return
-        if contains_lemma(parsed, "load"):
+        if contains_text(parsed, "load"):
             self._load_menu()
             self._say("Menu loaded")
             return
 
         # print info if required
         if self._verbose:
-            # root = parsed.root.text.lower().strip()
-            # self.say(f"La radice della frase è \'{root}\'")
+            root = parsed.root.text.lower().strip()
+            self._say(f"The root of the sentence is \'{root}\'")
             print(f"\n{'=' * 5} DEPENDENCIES OF SENTENCE {'=' * 5}")
             print_dependencies(parsed)
             print(f"\n{'=' * 5} TOKENS OF SENTENCE {'=' * 5}")
-            print_lemmas(parsed)
+            print_tokens_info(parsed)
 
+        # determine frame based on parsed command
         frame = self._determine_frame(parsed)
 
+        # change current frame if necessary, storing old one
         if self._current_frame is None:
             self._current_frame = frame
         elif frame is not None and type(frame) != type(self._current_frame):
@@ -94,10 +139,12 @@ class Bot:
             self._say("Ok we will come back to that later")
             self._current_frame = frame
 
-        # handle parsed command based on the current frame
+        # obtain reply by handling parsed command based on the current frame
         if isinstance(self._current_frame, EndFrame):
-            reply = self._goodbye()
+            self._say(self._goodbye())
             self._current_frame = None
+            self._frame_stack = []
+            return
         elif isinstance(self._current_frame, AddInfoFrame):
             reply = self._handle_add_info_frame(parsed)
         elif isinstance(self._current_frame, AskInfoFrame):
@@ -106,16 +153,16 @@ class Bot:
             reply = self._handle_order_frame(parsed)
         else:
             # if current frame is still None, could not determine user intention
-            reply = "I did not understand that, can you say that again?"
+            reply = "Sorry, I did not understand that, can you say that again?"
 
         self._say(reply)
 
+        # if frame is not over yet, save current reply for later use
         if self._current_frame is not None:
             self._current_frame.set_last_sentence(reply)
 
-        print(self._current_frame)
-        print(self._frame_stack)
-
+        # if older frame stored, restore it
+        # and announce that bot is going back to older frame
         if self._current_frame is None and len(self._frame_stack) > 0:
             self._current_frame = self._frame_stack.pop(0)
             if isinstance(self._current_frame, AddInfoFrame):
@@ -128,16 +175,28 @@ class Bot:
             self._say(self._current_frame.get_last_sentence())
 
     def _determine_frame(self, parsed):
+        """
+        Determines the user intention based upon the parsed command and returns
+        the appropriate frame to handle it
+        :param parsed: parsed command (spacy tree)
+        :return: appropriate frame
+        """
+
+        # if command is a question, then user is asking info
         if is_question(parsed):
             return AskInfoFrame()
 
+        # otherwise, count the number of frame triggers for each frame
         triggers_counts = self._count_frame_triggers(parsed)
 
         # could not determine frame
         if all([v == 0 for v in triggers_counts.values()]):
             return None
 
+        # return the frame with the majority of triggers
+        # MIGHT NOT BE THE BEST METHOD
         frame_name = max(triggers_counts, key=triggers_counts.get)
+
         if frame_name == "EndFrame":
             return EndFrame()
         elif frame_name == "OrderFrame":
@@ -148,6 +207,14 @@ class Bot:
             return AskInfoFrame()
 
     def _count_frame_triggers(self, parsed):
+        """
+        Counts the number of keywords for each frame triggered by the given
+        parsed command
+        :param parsed: parsed command
+        :return: a dictionary {frame_name: triggers_count}
+        """
+
+        # setup return object
         res = {
             "EndFrame": 0,
             "OrderFrame": 0,
@@ -155,6 +222,7 @@ class Bot:
             "AskInfoFrame": 0
         }
 
+        # visit tree breadth-first, adding up the triggers along the way
         nodes = [parsed.root]
         visited = []
         while nodes:
@@ -175,23 +243,35 @@ class Bot:
 
         return res
 
-    def _listen(self):
-        response = self._listener.listen()
-        return response
-
     def _add_menu_entry(self, name, course=None):
+        """
+        Adds an entry to the bot's menu to choose from
+        :param name: name of the entry (e.g. hamburger)
+        :param course: name of the course (optional, e.g. main course)
+        :return: None
+        """
+
+        # consistency checks
         if self._get_menu_entry(name) is not None:
             raise EntryAlreadyOnMenu()
 
-        if course is not None and course not in entry_courses:
+        if course is not None and course not in courses_names:
             raise CourseNotValid()
 
         self._menu["entries"].append({"name":name,
                                     "course":course})
 
     def _update_menu_entry(self, name, course=None):
+        """
+        Updates a menu entry (mainly adding info about course, but can be extended
+        later on if needed)
+        :param name: entry name
+        :param course: course of the entry (e.g. drink)
+        :return: None
+        """
 
-        if course is not None and course not in entry_courses:
+        # consistency checks
+        if course is not None and course not in courses_names:
             raise CourseNotValid()
 
         entry = self._get_menu_entry(name)
@@ -202,12 +282,18 @@ class Bot:
         if entry["course"] is not None:
             raise EntryAttributeAlreadySet()
 
+        # update entry
         for i, entry in enumerate(self._menu["entries"]):
             if entry["name"] == name:
                 self._menu["entries"][i].update({"name":name,
                                     "course":course})
 
     def _get_menu_entry(self, name):
+        """
+        Searches the given entry in the bot menu
+        :param name: entry name
+        :return: entry, None if absent
+        """
         for i, entry in enumerate(self._menu["entries"]):
             if entry["name"] == name:
                 return self._menu["entries"][i]
@@ -220,11 +306,15 @@ class Bot:
         :param parsed: the parsed command
         :return: consistent reply
         """
+
+        # consistency check
         assert isinstance(self._current_frame, AddInfoFrame)
 
+        # fill current frame slots based on the parsed command
         reply = ""
         self._fill_add_info_frame_slots(parsed)
 
+        # based on the frame slots, handle command
         if self._current_frame.get_slot("subj") == "menu":
             # add entry to menu
             try:
@@ -258,22 +348,30 @@ class Bot:
         return reply
 
     def _fill_add_info_frame_slots(self, parsed):
+        """
+        Fills slots of the current AddInfoFrame based on the information
+        contained in the given parsed command
+        :param parsed: parsed command
+        :return: None
+        """
         root = parsed.root.lemma_
 
         if root == "add":
-            # add entry to menu
+            # user wants to add entry to menu
             # TODO: allow to add entry and specify course at the same time
             self._current_frame.fill_slot("subj", "menu")
             entry = obtain_text(find_dep(parsed, "dobj"))
             self._current_frame.fill_slot("obj", entry)
         elif root == "is":
-            # add info about course
+            # user wants to add info about course
             self._current_frame.fill_slot("subj", "course")
             entry = obtain_text(find_dep(parsed, "nsubj"))
             self._current_frame.fill_slot("obj", entry)
             course = obtain_lemma(find_dep(parsed, "attr"))
             self._current_frame.fill_slot("info", course)
         elif self._current_frame.is_waiting_answer():
+            # user has responded to a previous question from the bot
+            # (up to now, that might be only to add info about course of added entry)
             course = obtain_lemma(find_dep(parsed, "ROOT"))
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("info", course)
@@ -284,30 +382,24 @@ class Bot:
         :param parsed: the parsed command
         :return: consistent reply
         """
+        # consistency check
         assert isinstance(self._current_frame, AskInfoFrame)
 
+        # if nothing to ask about...
         if len(self._menu["entries"]) == 0:
             reply = "I am sorry, there is nothing on menu today. " \
                     "Try and add something or load the stored menu first."
             return reply
 
-        obj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
-        pobj_lemma = obtain_lemma(find_dep(parsed, "pobj"))
+        # perform slot filling of current frame
+        self._fill_ask_info_frame(parsed)
 
-        matter = None
-        if (obj_lemma is not None and obj_lemma == "menu") or \
-                (pobj_lemma is not None and pobj_lemma == "menu"):
-            matter = "menu"
-        elif obj_lemma is not None and obj_lemma in entry_courses:
-            matter = obj_lemma
-        elif pobj_lemma is not None and pobj_lemma in entry_courses:
-            matter = pobj_lemma
-
-        if matter == "menu":
+        subj = self._current_frame.get_slot("subj")
+        if subj == "menu":
             # if asked to see the menu
             # tell menu (entry, course) for each entry in menu
             reply = "We have:"
-            for course in entry_courses:
+            for course in courses_names:
                 for entry in self._menu["entries"]:
                     if entry["course"] == course:
                         reply = f"{reply} {entry['name']},"
@@ -316,26 +408,57 @@ class Bot:
                 reply += f" for {course};"
 
             reply = reply[:-1]
-
-        elif matter in entry_courses:
+        else:
             # if asked about a particular course
             # tell menu (entry, course) for each entry in menu if course == obj
-            reply = "We have " + \
-                    ", ".join([entry["name"] for entry in self._menu["entries"]
-                               if entry["course"] == matter])
-        else:
-            reply = "Sorry, I am not sure I understood your question"
+            obj = self._current_frame.get_slot("obj")
+            if obj in courses_names:
+                reply = "We have " + \
+                        ", ".join([entry["name"] for entry in self._menu["entries"]
+                               if entry["course"] == obj])
+            else:
+                # the slot filling went wrong
+                reply = "Sorry, I am not sure I understood your question"
 
         self._current_frame = None
         return reply
 
+    def _fill_ask_info_frame(self, parsed):
+        """
+        Fills slots of the current AskInfoFrame based on the information
+        contained in the given parsed command
+        :param parsed: parsed command
+        :return: None
+        """
+
+        obj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
+        pobj_lemma = obtain_lemma(find_dep(parsed, "pobj"))
+
+        if (obj_lemma is not None and obj_lemma == "menu") or \
+                (pobj_lemma is not None and pobj_lemma == "menu"):
+            # user has asked to know the menu
+            self._current_frame.fill_slot("subj", "menu")
+        else:
+            # user has asked to know a course in particular
+            self._current_frame.fill_slot("subj", "course")
+
+            # to handle different possible phrasings of the question
+            if obj_lemma is not None and obj_lemma in courses_names:
+                self._current_frame.fill_slot("obj", obj_lemma)
+            elif pobj_lemma is not None and pobj_lemma in courses_names:
+                self._current_frame.fill_slot("obj", pobj_lemma)
+
     def _handle_order_frame(self, parsed):
         """
-        Handles the slot filling of the current OrderFrame
+        Handles the current OrderFrame
         :param parsed: the parsed command
         :return: consistent reply
         """
+
+        # consistency check
         assert isinstance(self._current_frame, OrderFrame)
+
+        # try to perform slot filling
 
         try:
             self._fill_order_frame_slots(parsed)
@@ -343,12 +466,14 @@ class Bot:
             reply = "I am sorry, that is not on the menu"
             return reply
 
+        # if first interaction and user did not specified anything
         if len(self._current_frame.filled_slots()) == 0:
-            # first interaction and user did not specified anything
+            # if user asked for order recap
             if self._current_frame.get_asked_recap():
                 reply = "You did not order anything yet, sir. " \
                         "I am ready to take your order"
             else:
+                # user just said something like "i am ready to order"
                 reply = "I am ready to take your order"
         else:
             # ongoing interaction
@@ -357,13 +482,13 @@ class Bot:
                 self._current_frame.set_asked_recap(False)
             elif self._current_frame.is_waiting_confirmation() and \
                 self._current_frame.get_user_answer() == "yes":
-                # user said he is ready to resume order
+                # user said he wants something else
                 reply = "Ok, please tell me"
                 self._current_frame.set_waiting_confirmation(False)
             elif len(self._current_frame.unfilled_slots()) == 0 or \
                     (self._current_frame.is_waiting_confirmation() and
                     self._current_frame.get_user_answer() == "no"):
-                # user has made a full order or completed his order
+                # user has made a full order or said he does not want anything else
                 reply = "Ok. Your order is complete. It will come right away. Enjoy!"
                 self._current_frame.set_waiting_confirmation(False)
                 self._current_frame = None
@@ -375,53 +500,89 @@ class Bot:
         return reply
 
     def _fill_order_frame_slots(self, parsed):
+        """
+        Fills slots of the current OrderInfoFrame based on the information
+        contained in the given parsed command
+        :param parsed: parsed command
+        :return: None
+        """
 
-        root = parsed.root.lemma_
-        xcomp = obtain_lemma(find_dep(parsed, "xcomp"))
-        dobj = obtain_text(find_dep(parsed, "dobj"))
-        advmod = obtain_lemma(find_dep(parsed, "advmod"))
+        # get needed sentence parts to determine user intention
+        root_lemma = parsed.root.lemma_
+        xcomp_lemma = obtain_lemma(find_dep(parsed, "xcomp"))
+        dobj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
+        dobj_text = obtain_text(find_dep(parsed, "dobj")) # need text for entry names
+        advmod_lemma = obtain_lemma(find_dep(parsed, "advmod"))
 
-        if dobj == "order" and advmod == "so far":
+        if xcomp_lemma is None and dobj_lemma is None:
+            # user said gibberish (as far as the bot knows...)
+            # best thing is to just say 'that is not on the menu'
+            raise EntryNotOnMenu
+
+        if dobj_lemma == "order" and advmod_lemma == "so far":
             # user has asked to recap his order so far
             self._current_frame.set_asked_recap(True)
             return
         if len(self._current_frame.filled_slots()) == 0 and \
-                xcomp == "order" and dobj is None:
-            # user is ready to order, but has not told anything yet
+                xcomp_lemma == "order" and dobj_text is None:
+            # user has just stated he is ready to order,
+            # but has not ordered anything yet
             return
         if self._current_frame.is_waiting_confirmation():
-            if root == "no":
-                # user has completed his order
+            # if bot is waiting for a binary answer ("do you want anything else?")
+            if root_lemma == "no":
+                # user does not want anything else
                 self._current_frame.set_user_answer("no")
-            elif root == "yes":
-                # user wishes to keep ordering
+            elif root_lemma == "yes":
+                # user wishes to keep on with his order
                 self._current_frame.set_user_answer("yes")
             else:
                 # user did not give a straight answer
                 self._current_frame.set_user_answer(None)
 
-        if dobj is not None:
-            # user has made an order for a menu entry
-            entry = self._get_menu_entry(dobj)
+        if dobj_text is not None:
+            # user has made an order for a menu entry,
+            # add that to the current order if entry is on menu
+            entry = self._get_menu_entry(dobj_text)
             if entry is None:
                 raise EntryNotOnMenu()
 
             self._current_frame.fill_slot(entry["course"], entry["name"])
 
     def _recap_order(self):
+        """
+        Recaps the order made by the user so far
+        :return: reply with the recap of the order
+        """
+
+        # consistency check
         assert isinstance(self._current_frame, OrderFrame)
         reply = "You ordered:"
 
-        for course in entry_courses:
+        for course in courses_names:
             order_entry = self._current_frame.get_slot(course)
             if order_entry is not None:
                 reply = f"{reply} {order_entry} for {course},"
 
         reply = f"{reply[:-1]}. Would you like anything else?"
+
+        # bot is waiting for confirmation
         self._current_frame.set_waiting_confirmation(True)
         return reply
 
+    def _welcome(self):
+        """
+        Welcom message upon bot startup
+        :return: welcome message
+        """
+        self._is_over = False
+        return "Hello, how may I help?"
+
     def _goodbye(self):
+        """
+        Goodbye message upon bot termination
+        :return: goodby message
+        """
         self._is_over = True
         return "Here's your bill. Goodbye!"
 
@@ -429,6 +590,11 @@ class Bot:
         return self._is_over
 
     def _load_menu(self, path=None):
+        """
+        Loads a menu
+        :param path: menu path
+        :return: None
+        """
         if path is None:
             menus = os.listdir("./menu")
             menus.sort()
@@ -437,5 +603,9 @@ class Bot:
             self._menu = json.load(file)
 
     def _save_menu(self):
+        """
+        Saves the current menu on disk as a json file, at path timestamp_menu.json
+        :return: None
+        """
         with open(f"./menu/{datetime.now().strftime('%Y%m%d-%H%M%S')}_menu.json", 'x') as f:
             json.dump(self._menu, f)

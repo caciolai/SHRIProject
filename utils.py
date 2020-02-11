@@ -1,5 +1,4 @@
 import argparse
-from spacy import displacy
 from nltk import Tree
 from texttable import Texttable
 
@@ -19,14 +18,23 @@ def build_argparser():
 
     return parser
 
-def print_lemmas(sentence):
+def print_tokens_info(parsed):
+    """
+    Prints information about the tokens in the parsed sentence, in a tabular form:
+    | word | lemma | POS tag | dependency relation in the sentence |
+    :param parsed: parsed sentence
+    :return: None
+    """
     t = Texttable()
-    t.add_rows([["text", "lemma", "pos", "dep"]] +
+    t.add_rows([["word", "lemma", "pos", "dep"]] +
                [[token.text, token.lemma_, token.pos_, token.dep_]
-                 for token in sentence])
+                for token in parsed])
 
     print(t.draw())
 
+"""
+Functions to pretty print the dependency tree of a given parsed sentence
+"""
 def tok_format(tok):
     return f"{tok.text} ({tok.dep_})"
 
@@ -36,11 +44,8 @@ def to_nltk_tree(node):
     else:
         return tok_format(node)
 
-def print_dependencies(sentence):
-    if len(list(sentence.root.children)) == 0:
-        print(tok_format(sentence.root))
+def print_dependencies(parsed):
+    if len(list(parsed.root.children)) == 0:
+        print(tok_format(parsed.root))
     else:
-        to_nltk_tree(sentence.root).pretty_print()
-
-def visualize_dependencies(doc):
-    displacy.serve(doc, style="dep")
+        to_nltk_tree(parsed.root).pretty_print()

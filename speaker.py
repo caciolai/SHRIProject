@@ -4,6 +4,7 @@ import os
 
 WIN_EN = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_ZIRA_11.0"
 
+
 class Speaker:
     """
     A class that simply speaks sentences through the computer speakers
@@ -17,21 +18,21 @@ class Speaker:
         :param spd: if set, use ubuntu spd-say instead of pyttsx3
         """
 
-        self.spd = spd
-        self.rate = rate
-        self.pitch = pitch
-        self.volume = volume
+        self._spd = spd
+        self._rate = rate
+        self._pitch = pitch
+        self._volume = volume
 
-        if not self.spd:
-            self.engine = pyttsx3.init()
-            self.engine.setProperty('rate', rate)
-            self.engine.setProperty('pitch', float(pitch))
-            self.engine.setProperty('volume', float(volume))
+        if not self._spd:
+            self._engine = pyttsx3.init()
+            self._engine.setProperty('rate', rate)
+            self._engine.setProperty('pitch', float(pitch))
+            self._engine.setProperty('volume', float(volume))
 
             if os.name == "nt":
-                self.engine.setProperty("voice", WIN_EN)
+                self._engine.setProperty("voice", WIN_EN)
             else:
-                self.engine.setProperty("voice", "english")
+                self._engine.setProperty("voice", "english")
 
     def speak(self, sentence):
         """
@@ -40,30 +41,35 @@ class Speaker:
         :return: None
         """
 
-        if self.spd:
-            self.speak_spd(sentence)
+        if self._spd:
+            self._speak_spd(sentence)
         else:
-            self.speak_pyttsx3(sentence)
+            self._speak_pyttsx3(sentence)
 
-
-    def speak_spd(self, sentence):
+    def _speak_spd(self, sentence):
+        """
+        Speaks the given sentence through the computer speakers using spd (on Linux)
+        :param sentence: sentence
+        :return: None
+        """
+        assert os.name == "posix"
         os.system(
             "spd-say \"{}\" "
             "--rate {} "
             "--pitch {} "
             "--volume {}".format(
                 sentence,
-                self.rate,
-                self.pitch,
-                self.volume
+                self._rate,
+                self._pitch,
+                self._volume
             )
         )
 
-    def speak_pyttsx3(self, sentence):
+    def _speak_pyttsx3(self, sentence):
         """
         Speaks the given sentence through the computer speakers using pyttsx3
         :param sentence: sentence
         :return: None
         """
-        self.engine.say(sentence)
-        self.engine.runAndWait()
+        self._engine.say(sentence)
+        self._engine.runAndWait()

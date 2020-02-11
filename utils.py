@@ -14,6 +14,9 @@ def build_argparser():
                         help='Print dependency tree and lemmas info '
                              'of every heard sentence')
 
+    parser.add_argument('--keyboard', action="store_true",
+                        help='Use keyboard instead of voice to interact with bot')
+
     return parser
 
 def print_lemmas(sentence):

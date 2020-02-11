@@ -278,7 +278,6 @@ class Bot:
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("info", course)
 
-
     def _handle_ask_info_frame(self, parsed):
         """
         Handles the current AskInfoFrame
@@ -288,42 +287,44 @@ class Bot:
         assert isinstance(self._current_frame, AskInfoFrame)
 
         if len(self._menu["entries"]) == 0:
-            reply = "I am sorry, there is nothing on menu today. Try and add something."
-        else:
-            obj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
-            pobj_lemma = obtain_lemma(find_dep(parsed, "pobj"))
+            reply = "I am sorry, there is nothing on menu today. " \
+                    "Try and add something or load the stored menu first."
+            return reply
 
-            matter = None
-            if (obj_lemma is not None and obj_lemma == "menu") or \
-                    (pobj_lemma is not None and pobj_lemma == "menu"):
-                matter = "menu"
-            elif obj_lemma is not None and obj_lemma in entry_courses:
-                matter = obj_lemma
-            elif pobj_lemma is not None and pobj_lemma in entry_courses:
-                matter = pobj_lemma
+        obj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
+        pobj_lemma = obtain_lemma(find_dep(parsed, "pobj"))
 
-            if matter == "menu":
-                # if asked to see the menu
-                # tell menu (entry, course) for each entry in menu
-                reply = "We have:"
-                for course in entry_courses:
-                    for entry in self._menu["entries"]:
-                        if entry["course"] == course:
-                            reply = f"{reply} {entry['name']},"
+        matter = None
+        if (obj_lemma is not None and obj_lemma == "menu") or \
+                (pobj_lemma is not None and pobj_lemma == "menu"):
+            matter = "menu"
+        elif obj_lemma is not None and obj_lemma in entry_courses:
+            matter = obj_lemma
+        elif pobj_lemma is not None and pobj_lemma in entry_courses:
+            matter = pobj_lemma
 
-                    reply = reply[:-1]
-                    reply += f" for {course};"
+        if matter == "menu":
+            # if asked to see the menu
+            # tell menu (entry, course) for each entry in menu
+            reply = "We have:"
+            for course in entry_courses:
+                for entry in self._menu["entries"]:
+                    if entry["course"] == course:
+                        reply = f"{reply} {entry['name']},"
 
                 reply = reply[:-1]
+                reply += f" for {course};"
 
-            elif matter in entry_courses:
-                # if asked about a particular course
-                # tell menu (entry, course) for each entry in menu if course == obj
-                reply = "We have " + \
-                        ", ".join([entry["name"] for entry in self._menu["entries"]
-                                   if entry["course"] == matter])
-            else:
-                reply = "Sorry, I am not sure I understood your question"
+            reply = reply[:-1]
+
+        elif matter in entry_courses:
+            # if asked about a particular course
+            # tell menu (entry, course) for each entry in menu if course == obj
+            reply = "We have " + \
+                    ", ".join([entry["name"] for entry in self._menu["entries"]
+                               if entry["course"] == matter])
+        else:
+            reply = "Sorry, I am not sure I understood your question"
 
         self._current_frame = None
         return reply
@@ -336,8 +337,6 @@ class Bot:
         """
         assert isinstance(self._current_frame, OrderFrame)
 
-        reply = ""
-        old_frame_len = len(self._current_frame.filled_slots())
         try:
             self._fill_order_frame_slots(parsed)
         except EntryNotOnMenu:
@@ -345,7 +344,7 @@ class Bot:
             return reply
 
         if len(self._current_frame.filled_slots()) == 0:
-            # first interaction
+            # first interaction and user did not specified anything
             if self._current_frame.get_asked_recap():
                 reply = "You did not order anything yet, sir. " \
                         "I am ready to take your order"
@@ -358,6 +357,7 @@ class Bot:
                 self._current_frame.set_asked_recap(False)
             elif self._current_frame.is_waiting_confirmation() and \
                 self._current_frame.get_user_answer() == "yes":
+                # user said he is ready to resume order
                 reply = "Ok, please tell me"
                 self._current_frame.set_waiting_confirmation(False)
             elif len(self._current_frame.unfilled_slots()) == 0 or \
@@ -384,20 +384,23 @@ class Bot:
         if dobj == "order" and advmod == "so far":
             # user has asked to recap his order so far
             self._current_frame.set_asked_recap(True)
-        elif len(self._current_frame.filled_slots()) == 0 and \
+            return
+        if len(self._current_frame.filled_slots()) == 0 and \
                 xcomp == "order" and dobj is None:
             # user is ready to order, but has not told anything yet
             return
-        elif self._current_frame.is_waiting_confirmation():
-            # user has completed his order
+        if self._current_frame.is_waiting_confirmation():
             if root == "no":
+                # user has completed his order
                 self._current_frame.set_user_answer("no")
             elif root == "yes":
+                # user wishes to keep ordering
                 self._current_frame.set_user_answer("yes")
             else:
+                # user did not give a straight answer
                 self._current_frame.set_user_answer(None)
-            return
-        elif dobj is not None:
+
+        if dobj is not None:
             # user has made an order for a menu entry
             entry = self._get_menu_entry(dobj)
             if entry is None:

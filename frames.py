@@ -210,7 +210,7 @@ class EndFrame(Frame):
         """
         end_triggers = {
             "dobj": ["bill"],
-            "ROOT": ["shut"],
+            "ROOT": ["shut", "goodbye"],
             "prt": ["down"]
         }
         return dep in end_triggers and token in end_triggers[dep]

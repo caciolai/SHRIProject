@@ -136,7 +136,7 @@ class Bot:
             self._current_frame = frame
         elif frame is not None and type(frame) != type(self._current_frame):
             self._frame_stack.insert(0, self._current_frame)
-            self._say("Ok we will come back to that later")
+            # self._say("Ok we will come back to that later")
             self._current_frame = frame
 
         # obtain reply by handling parsed command based on the current frame
@@ -159,7 +159,8 @@ class Bot:
 
         # if frame is not over yet, save current reply for later use
         if self._current_frame is not None:
-            self._current_frame.set_last_sentence(reply)
+            # self._current_frame.set_last_sentence(reply)
+            self._set_last_sentence()
 
         # if older frame stored, restore it
         # and announce that bot is going back to older frame
@@ -172,7 +173,8 @@ class Bot:
             elif isinstance(self._current_frame, OrderFrame):
                 self._say("Ok now back to your order")
 
-            self._say(self._current_frame.get_last_sentence())
+            if self._current_frame.get_last_sentence() is not None:
+                self._say(self._current_frame.get_last_sentence())
 
     def _determine_frame(self, parsed):
         """
@@ -480,6 +482,8 @@ class Bot:
             if self._current_frame.get_asked_recap():
                 reply = self._recap_order()
                 self._current_frame.set_asked_recap(False)
+                reply = f"{reply}. Would you like to add something else?"
+                self._current_frame.set_waiting_confirmation(True)
             elif self._current_frame.is_waiting_confirmation() and \
                 self._current_frame.get_user_answer() == "yes":
                 # user said he wants something else
@@ -513,8 +517,28 @@ class Bot:
         dobj_lemma = obtain_lemma(find_dep(parsed, "dobj"))
         dobj_text = obtain_text(find_dep(parsed, "dobj")) # need text for entry names
         advmod_lemma = obtain_lemma(find_dep(parsed, "advmod"))
+        intj_lemma = obtain_lemma(find_dep(parsed, "intj"))
+        det_lemma = obtain_lemma(find_dep(parsed, "det"))
 
-        if xcomp_lemma is None and dobj_lemma is None:
+        if self._current_frame.is_waiting_confirmation():
+            # if bot is waiting for a binary answer ("do you want anything else?")
+            if (root_lemma == "no" or intj_lemma == "no" or det_lemma == "no") \
+                    and \
+                (root_lemma != "have" and root_lemma != "like" and root_lemma != "take"):
+                # user does not want anything else
+                self._current_frame.set_user_answer("no")
+                return
+            elif (root_lemma == "yes" or intj_lemma == "yes") \
+                    and \
+                (root_lemma != "have" and root_lemma != "like" and root_lemma != "take"):
+                # user wishes to keep on with his order
+                self._current_frame.set_user_answer("yes")
+                return
+            else:
+                # user did not give a straight answer
+                self._current_frame.set_user_answer(None)
+
+        elif xcomp_lemma is None and dobj_lemma is None:
             # user said gibberish (as far as the bot knows...)
             # best thing is to just say 'that is not on the menu'
             raise EntryNotOnMenu
@@ -523,22 +547,12 @@ class Bot:
             # user has asked to recap his order so far
             self._current_frame.set_asked_recap(True)
             return
+
         if len(self._current_frame.filled_slots()) == 0 and \
                 xcomp_lemma == "order" and dobj_text is None:
             # user has just stated he is ready to order,
             # but has not ordered anything yet
             return
-        if self._current_frame.is_waiting_confirmation():
-            # if bot is waiting for a binary answer ("do you want anything else?")
-            if root_lemma == "no":
-                # user does not want anything else
-                self._current_frame.set_user_answer("no")
-            elif root_lemma == "yes":
-                # user wishes to keep on with his order
-                self._current_frame.set_user_answer("yes")
-            else:
-                # user did not give a straight answer
-                self._current_frame.set_user_answer(None)
 
         if dobj_text is not None:
             # user has made an order for a menu entry,
@@ -564,11 +578,23 @@ class Bot:
             if order_entry is not None:
                 reply = f"{reply} {order_entry} for {course},"
 
-        reply = f"{reply[:-1]}. Would you like anything else?"
+        reply = f"{reply[:-1]}"
 
-        # bot is waiting for confirmation
-        self._current_frame.set_waiting_confirmation(True)
         return reply
+
+    def _set_last_sentence(self):
+        if isinstance(self._current_frame, AskInfoFrame):
+            return
+        elif isinstance(self._current_frame, AddInfoFrame):
+            return
+        elif isinstance(self._current_frame, EndFrame):
+            return
+        elif isinstance(self._current_frame, OrderFrame):
+            if len(self._current_frame.filled_slots()) == 0:
+                self._current_frame.set_last_sentence("I am ready to take your order")
+            else:
+                self._current_frame.set_last_sentence("Would you like anything else?")
+                self._current_frame.set_waiting_confirmation(True)
 
     def _welcome(self):
         """

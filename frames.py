@@ -144,7 +144,8 @@ class AddInfoFrame(Frame):
         :return: bool
         """
         addinfo_triggers = {
-            "ROOT": ["add", "is"]
+            "ROOT": ["add", "is", "like", "want"],
+            "xcomp": ["add"]
         }
         return dep in addinfo_triggers and token in addinfo_triggers[dep]
 

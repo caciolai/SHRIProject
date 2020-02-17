@@ -331,10 +331,10 @@ class Bot:
             # add info about course
             entry = self._current_frame.get_slot("obj")
             course = self._current_frame.get_slot("info")
-            self._current_frame = None
             try:
                 self._update_menu_entry(entry, course)
                 reply = "Ok"
+                self._current_frame = None
             except EntryAttributeAlreadySet:
                 # TODO: add option to modify entry
                 reply = "{} is already a {}".format(
@@ -357,8 +357,9 @@ class Bot:
         :return: None
         """
         root = parsed.root.lemma_
+        pobj = obtain_lemma(find_dep(parsed, "pobj"))
 
-        if root == "add":
+        if root == "add" or pobj == "menu":
             # user wants to add entry to menu
             # TODO: allow to add entry and specify course at the same time
             self._current_frame.fill_slot("subj", "menu")
@@ -374,7 +375,9 @@ class Bot:
         elif self._current_frame.is_waiting_answer():
             # user has responded to a previous question from the bot
             # (up to now, that might be only to add info about course of added entry)
-            course = obtain_lemma(find_dep(parsed, "ROOT"))
+            root = obtain_lemma(find_dep(parsed, "ROOT"))
+            attr = obtain_lemma(find_dep(parsed, "attr"))
+            course = root if root in courses_names else attr
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("info", course)
 
@@ -394,7 +397,7 @@ class Bot:
             return reply
 
         # perform slot filling of current frame
-        self._fill_ask_info_frame(parsed)
+        self._fill_ask_info_frame_slots(parsed)
 
         subj = self._current_frame.get_slot("subj")
         if subj == "menu":
@@ -402,12 +405,15 @@ class Bot:
             # tell menu (entry, course) for each entry in menu
             reply = "We have:"
             for course in courses_names:
+                if len([entry for entry in self._menu["entries"] if entry["course"] == course]) == 0:
+                    continue
+
                 for entry in self._menu["entries"]:
                     if entry["course"] == course:
                         reply = f"{reply} {entry['name']},"
 
                 reply = reply[:-1]
-                reply += f" for {course};"
+                reply = f"{reply} for {course};"
 
             reply = reply[:-1]
         else:
@@ -415,9 +421,16 @@ class Bot:
             # tell menu (entry, course) for each entry in menu if course == obj
             obj = self._current_frame.get_slot("obj")
             if obj in courses_names:
-                reply = "We have " + \
-                        ", ".join([entry["name"] for entry in self._menu["entries"]
-                               if entry["course"] == obj])
+                reply = ""
+                for entry in self._manu["entries"]:
+                    if entry["course"] == obj:
+                        reply = f"{reply} {entry['name']},"
+
+                if len(reply) == "":
+                    reply = f"I'm sorry, we don't have anything for {obj}"
+                else:
+                    reply = f"We have{reply[:-1]}"
+
             else:
                 # the slot filling went wrong
                 reply = "Sorry, I am not sure I understood your question"
@@ -425,7 +438,7 @@ class Bot:
         self._current_frame = None
         return reply
 
-    def _fill_ask_info_frame(self, parsed):
+    def _fill_ask_info_frame_slots(self, parsed):
         """
         Fills slots of the current AskInfoFrame based on the information
         contained in the given parsed command

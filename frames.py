@@ -175,7 +175,7 @@ class OrderFrame(Frame):
         :return: bool
         """
         order_triggers = {
-            "ROOT": ["like", "have"],
+            "ROOT": ["like", "have", "want", "take"],
             "xcomp": ["order"],
             "dobj": ["order"],
             "advmod": ["so", "far"]

@@ -11,10 +11,13 @@ def build_argparser():
     parser = argparse.ArgumentParser(description='Waiter Bot')
     parser.add_argument('--verbose', action="store_true",
                         help='Print dependency tree and lemmas info '
-                             'of every heard sentence')
+                             'of every input command')
 
     parser.add_argument('--keyboard', action="store_true",
-                        help='Use keyboard instead of voice to interact with bot')
+                        help='Use keyboard instead of voice to input commands')
+
+    parser.add_argument('--silent', action="store_true",
+                        help='Bot replies only via command line (no text to speech)')
 
     return parser
 

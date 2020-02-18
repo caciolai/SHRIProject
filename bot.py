@@ -21,11 +21,13 @@ class Bot:
         speaker object used for text to speech
     _listener: Listener
         listener object used for speech to perform Automatic Speech Recognition
-    _bot_prompt: str
+    _prompt: str
         colored name of the bot to appear in the terminal
     _verbose: bool
         whether the bot should print info about the command it receives
         (dependency tree, lemmas info)
+    _silent: bool
+        whether the bot should only print replies (no text to speech)
     _frame_stack: list
         stack where the bot holds the frames it still has not finished to process
     _current_frame: Frame
@@ -33,21 +35,23 @@ class Bot:
     _is_over: bool
         whether the interaction is over
     """
-    def __init__(self, name, color, verbose=True, menu_path=None):
+    def __init__(self, name, color, verbose=True, silent=False, menu_path=None):
         """
         Constructor
         :param name: the bot's name it will use in the dialogues
         :param color: the color the bot will use in the prompt
         :param verbose: whether the bot should print info about
         the command it receives (dependency tree, lemmas info)
+        :param silent: if true, then only use print (no text to speech)
         :param menu_path: the path of the stored menu
         """
 
         self._name = name
         self._speaker = Speaker(rate=150, volume=1)
         self._listener = Listener(mic_index=0)
-        self._bot_prompt = colored(f'{self._name}: ', color)
+        self._prompt = colored(f'{self._name}: ', color)
         self._verbose = verbose
+        self._silent = silent
 
         self._frame_stack = []
         self._current_frame = None
@@ -68,8 +72,9 @@ class Bot:
         :param sentence: sentence
         :return: None
         """
-        print(f"{self._bot_prompt} {sentence}")
-        self._speaker.speak(sentence)
+        print(f"{self._prompt} {sentence}")
+        if not self._silent:
+            self._speaker.speak(sentence)
 
     def listen(self):
         """
@@ -77,6 +82,8 @@ class Bot:
         Loops until the sentence in understood properly or there is a connection error
         :return: transcribed sentence from voice
         """
+        if self._verbose:
+            print(f'{self._prompt} * listening *')
         res = self._listen()
         while not res["success"]:
             err = res["error"]
@@ -322,8 +329,14 @@ class Bot:
             try:
                 entry = self._current_frame.get_slot("obj")
                 self._add_menu_entry(entry)
-                reply = "Ok. What course is it?"
-                self._current_frame.set_waiting_answer(True)
+                if self._current_frame.get_slot("info") is None:
+                    reply = "Ok. What course is it?"
+                    self._current_frame.set_waiting_answer(True)
+                else:
+                    course = self._current_frame.get_slot("info")
+                    self._update_menu_entry(entry, course)
+                    reply = "Ok"
+                    self._current_frame = None
             except EntryAlreadyOnMenu:
                 reply = "This entry is already in the menu"
                 self._current_frame = None
@@ -356,16 +369,20 @@ class Bot:
         :param parsed: parsed command
         :return: None
         """
-        root = parsed.root.lemma_
-        pobj = obtain_lemma(find_dep(parsed, "pobj"))
+        root_lemma = parsed.root.lemma_
+        pobj_lemma = obtain_lemma(find_dep(parsed, "pobj"))
 
-        if root == "add" or pobj == "menu":
+        if root_lemma == "add" or pobj_lemma == "menu":
             # user wants to add entry to menu
             # TODO: allow to add entry and specify course at the same time
             self._current_frame.fill_slot("subj", "menu")
             entry = obtain_text(find_dep(parsed, "dobj"))
             self._current_frame.fill_slot("obj", entry)
-        elif root == "is":
+            if pobj_lemma in courses_names:
+                # user has also specified course
+                self._current_frame.fill_slot("info", pobj_lemma)
+
+        elif root_lemma == "is":
             # user wants to add info about course
             self._current_frame.fill_slot("subj", "course")
             entry = obtain_text(find_dep(parsed, "nsubj"))
@@ -375,9 +392,9 @@ class Bot:
         elif self._current_frame.is_waiting_answer():
             # user has responded to a previous question from the bot
             # (up to now, that might be only to add info about course of added entry)
-            root = obtain_lemma(find_dep(parsed, "ROOT"))
+            root_lemma = obtain_lemma(find_dep(parsed, "ROOT"))
             attr = obtain_lemma(find_dep(parsed, "attr"))
-            course = root if root in courses_names else attr
+            course = root_lemma if root_lemma in courses_names else attr
             self._current_frame.fill_slot("subj", "course")
             self._current_frame.fill_slot("info", course)
 
@@ -394,6 +411,7 @@ class Bot:
         if len(self._menu["entries"]) == 0:
             reply = "I am sorry, there is nothing on menu today. " \
                     "Try and add something or load the stored menu first."
+            self._current_frame = None
             return reply
 
         # perform slot filling of current frame
@@ -422,7 +440,7 @@ class Bot:
             obj = self._current_frame.get_slot("obj")
             if obj in courses_names:
                 reply = ""
-                for entry in self._manu["entries"]:
+                for entry in self._menu["entries"]:
                     if entry["course"] == obj:
                         reply = f"{reply} {entry['name']},"
 
@@ -473,8 +491,14 @@ class Bot:
         # consistency check
         assert isinstance(self._current_frame, OrderFrame)
 
-        # try to perform slot filling
+        # if nothing to order...
+        if len(self._menu["entries"]) == 0:
+            reply = "I am sorry, there is nothing on menu today. " \
+                    "Try and add something or load the stored menu first."
+            self._current_frame = None
+            return reply
 
+        # try to perform slot filling
         try:
             self._fill_order_frame_slots(parsed)
         except EntryNotOnMenu:
@@ -543,7 +567,7 @@ class Bot:
                 return
             elif (root_lemma == "yes" or intj_lemma == "yes") \
                     and \
-                (root_lemma != "have" and root_lemma != "like" and root_lemma != "take"):
+                (not OrderFrame.is_trigger(root_lemma, "ROOT")):
                 # user wishes to keep on with his order
                 self._current_frame.set_user_answer("yes")
                 return

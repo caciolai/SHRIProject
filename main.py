@@ -6,7 +6,7 @@ from bot import Bot
 from utils import *
 
 
-BOT_COLOR = 'red'
+BOT_COLOR = 'cyan'
 USER_COLOR = 'green'
 
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     # initialize bot
-    bot = Bot("Bot", color=BOT_COLOR, verbose=args.verbose)
+    bot = Bot("Bot", color=BOT_COLOR, verbose=args.verbose, silent=args.silent)
 
     # setup colored prompt for user
     user_prompt = colored('User: ', USER_COLOR)
@@ -32,12 +32,13 @@ if __name__ == '__main__':
     while not bot.is_over():
         # obtain command (ASR or keyboard)
         if args.keyboard:
-            print(f"{user_prompt} ", end="")
-            command = input()
+            command = ""
+            # sanity check
+            while len(command.strip()) == 0:
+                print(f"{user_prompt} ", end="")
+                command = input()
         else:
             command = bot.listen()
-            if command is None:
-                break
             print(f"{user_prompt} {command}")
 
         # process command (bot will reply accordingly)
